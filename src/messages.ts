@@ -1,0 +1,50 @@
+export const MessageType = {
+  GetState: "GET_STATE",
+  StartRecording: "START_RECORDING",
+  PauseRecording: "PAUSE_RECORDING",
+  ResumeRecording: "RESUME_RECORDING",
+  StopRecording: "STOP_RECORDING",
+  ExportSession: "EXPORT_SESSION",
+  DeleteSession: "DELETE_SESSION",
+  TestDevice: "TEST_DEVICE",
+  SubscribeLevels: "SUBSCRIBE_LEVELS",
+  UnsubscribeLevels: "UNSUBSCRIBE_LEVELS",
+  AudioLevelUpdate: "AUDIO_LEVEL_UPDATE",
+  DownloadRecoverable: "DOWNLOAD_RECOVERABLE",
+  ClearAllHistory: "CLEAR_ALL_HISTORY",
+  GetMp3Url: "GET_MP3_URL",
+  SaveSettings: "SAVE_SETTINGS",
+  OpenHelp: "OPEN_HELP",
+  RecordingHistoryChanged: "RECORDING_HISTORY_CHANGED",
+  StorageGet: "STORAGE_GET",
+  StorageSet: "STORAGE_SET",
+  StorageRemove: "STORAGE_REMOVE"
+} as const;
+
+export type MessageType = (typeof MessageType)[keyof typeof MessageType];
+
+export interface Request {
+  type: MessageType;
+  target: "service-worker" | "offscreen" | "dashboard";
+  requestId: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface Response {
+  ok: boolean;
+  requestId: string;
+  data?: unknown;
+  error?: { code: string; message: string; details?: string };
+}
+
+export const requestId = () => crypto.randomUUID();
+
+export const failure = (request: Partial<Request>, context: string, error: unknown): Response => ({
+  ok: false,
+  requestId: request.requestId || "",
+  error: {
+    code: "MESSAGE_ERROR",
+    message: error instanceof Error ? error.message : String(error),
+    details: `context=${context}; type=${request.type || "missing"}; target=${request.target || "missing"}; supported=${Object.values(MessageType).join(",")}`
+  }
+});

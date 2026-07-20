@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+  <title>SafeCallRecorder</title>
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <div class="brand">
+        <img src="icons/icon48.png" width="36" height="36" alt="">
+        <div>
+          <h1>SafeCallRecorder</h1>
+          <p class="privacy">录音仅保存在本机，不会上传。</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button type="button" id="helpBtn" class="btn help-entry" title="使用说明">？ 使用说明</button>
+        <button type="button" id="settingsBtn" class="icon-btn" title="设置" aria-label="设置">⚙</button>
+      </div>
+    </header>
+
+    <div id="onboardingCard" class="onboarding-card hidden">
+      <h2>第一次使用？按照 3 步开始录音</h2>
+      <ol>
+        <li>选择声音设备</li>
+        <li>确认音浪有变化</li>
+        <li>点击开始录音</li>
+      </ol>
+      <div class="onboarding-actions">
+        <button type="button" id="onboardingOpenHelp" class="btn help-entry">查看完整说明</button>
+        <button type="button" id="onboardingDismiss" class="btn outline">我知道了</button>
+      </div>
+    </div>
+
+    <div id="settingsPanel" class="settings hidden">
+      <label class="row">停止录音后的下载方式
+        <select id="stopDownloadMode">
+          <option value="original_then_mp3">立即下载原始录音，并在后台生成MP3（推荐）</option>
+          <option value="original_only">只下载原始录音</option>
+          <option value="mp3_only">等待MP3生成后只下载MP3（不推荐）</option>
+        </select>
+      </label>
+      <p class="hint" id="stopDownloadModeHint">最安全。停止后马上取得录音，MP3完成后再自动下载。</p>
+      <label class="row"><span>停止后立即下载原始录音</span><input type="checkbox" id="autoDownloadOriginal" checked></label>
+      <label class="row"><span>MP3生成成功后自动下载</span><input type="checkbox" id="autoDownload" checked></label>
+      <label class="row"><span>MP3成功后保留原始下载文件</span><input type="checkbox" id="keepOriginalAfterMp3" checked></label>
+      <label class="row">默认比特率
+        <select id="defaultBitrate"></select>
+      </label>
+      <label class="row">声音识别灵敏度
+        <select id="detectionSensitivity">
+          <option value="sensitive">灵敏</option>
+          <option value="standard" selected>标准</option>
+          <option value="stable">稳定</option>
+        </select>
+      </label>
+      <p class="hint">标准适合普通通话：短暂停顿不会立刻显示“没有声音”。</p>
+      <button type="button" id="showOnboardingAgain" class="btn outline small">重新显示新手引导</button>
+      <p class="hint">下载文件通常在浏览器的“下载”文件夹。请在浏览器下载设置中查看。</p>
+      <p class="hint">隐私：录音只保存在本机浏览器存储中，不会上传。</p>
+      <button type="button" id="clearAll" class="btn danger outline">清理所有历史录音</button>
+    </div>
+
+    <section class="card">
+      <label>录音名称（可选）
+        <input id="recName" type="text" maxlength="80" placeholder="例如：VK通话、会议记录" autocomplete="off">
+      </label>
+
+      <div class="device-row">
+        <label class="grow">声音设备
+          <select id="device"></select>
+        </label>
+        <button type="button" id="refresh" class="icon-btn refresh" title="刷新设备" aria-label="刷新设备">↻</button>
+      </div>
+      <p class="inline-help"><button type="button" id="helpDevicesLink" class="linkish">不会选设备？</button></p>
+
+      <div id="permCard" class="perm-card hidden">
+        <p>需要声音设备权限才能显示完整设备列表。</p>
+        <button type="button" id="permission" class="btn secondary">授权设备</button>
+      </div>
+      <p id="deviceMsg" class="msg"></p>
+
+      <div id="liveMonitor" class="live-monitor" aria-live="polite"></div>
+
+      <div class="main-actions">
+        <button type="button" id="start" class="btn start">开始录音</button>
+        <button type="button" id="stop" class="btn stop" disabled>停止录音</button>
+      </div>
+      <p id="status" class="status">准备就绪</p>
+      <div class="timers">
+        <div><span>当前录音</span><strong id="elapsed">00:00</strong></div>
+        <div><span>已安全保存</span><strong id="safe">00:00</strong></div>
+      </div>
+
+      <label class="bitrate-label-row">比特率
+        <button type="button" id="helpBitrateLink" class="linkish inline">怎么选？</button>
+        <select id="bitrate"></select>
+      </label>
+      <div id="bitrateCard" class="bitrate-card">
+        <div class="bitrate-card-top">
+          <strong id="bitrateTitle">重要通话</strong>
+          <span id="bitrateBadge" class="bitrate-badge">默认推荐</span>
+        </div>
+        <p id="bitrateDesc" class="bitrate-desc"></p>
+        <p id="bitrateSize" class="bitrate-size"></p>
+        <p id="bitrateWarn" class="bitrate-warn hidden"></p>
+        <p id="bitrateTip" class="bitrate-tip"></p>
+        <button type="button" id="bitrateDetailsToggle" class="linkish">查看详细说明</button>
+        <div id="bitrateDetails" class="bitrate-details hidden">
+          <p><strong>适合：</strong><span id="bitrateSuitable"></span></p>
+          <p id="bitrateUnsuitableRow" class="hidden"><strong>不适合：</strong><span id="bitrateUnsuitable"></span></p>
+          <p id="bitrateDetailText"></p>
+        </div>
+        <p class="hint estimate-note">以下为预计大小，实际文件可能略有不同。</p>
+      </div>
+      <p id="lowQualityNote" class="low-quality-note hidden">当前使用最低音质录音。</p>
+    </section>
+
+    <section class="card history-card">
+      <div class="history-head">
+        <h2>录音历史</h2>
+        <button type="button" id="clearHistory" class="btn danger outline small" disabled>清空历史</button>
+      </div>
+      <div id="history" class="history"></div>
+      <p id="historyEmpty" class="hint">暂无录音</p>
+    </section>
+  </div>
+
+  <div id="confirmModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-card">
+      <h3 id="confirmTitle"></h3>
+      <p id="confirmBody" class="modal-body"></p>
+      <div class="modal-actions">
+        <button type="button" id="confirmCancel" class="btn outline small">取消</button>
+        <button type="button" id="confirmOk" class="btn danger outline small">确认</button>
+      </div>
+    </div>
+  </div>
+  <script src="dashboard.js"></script>
+</body>
+</html>

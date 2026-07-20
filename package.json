@@ -1,0 +1,23 @@
+{
+  "name": "safecallrecorder-extension",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "latest",
+    "@types/node": "^26.1.1",
+    "esbuild": "latest",
+    "fake-indexeddb": "latest",
+    "happy-dom": "^20.11.0",
+    "typescript": "latest",
+    "vitest": "latest"
+  },
+  "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "lamejs": "^1.2.1"
+  }
+}

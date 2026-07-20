@@ -1,0 +1,256 @@
+import { buildOriginalFileName, buildRecoveryZipName, formatStamp, sanitizeFileBase } from "../filename";
+import { storage } from "../storage-manager";
+import { type Chunk, type Part, type Session } from "../types";
+import { buildStoreZip } from "../zip-store";
+
+const pendingOriginal = new Map<string, Promise<OriginalDownloadResult>>();
+
+export type OriginalDownloadResult = {
+  ok: boolean;
+  kind: "webm" | "zip" | "parts" | "none";
+  filename?: string;
+  filenames?: string[];
+  downloadId?: number;
+  partCount: number;
+  error?: { code: string; message: string };
+};
+
+async function partsForSession(sessionId: string): Promise<Part[]> {
+  const parts = (await storage.byIndex<Part>("parts", "sessionId", sessionId))
+    .filter((p) => p.trackId === "selected_device" || p.trackId === "tab_audio")
+    .sort((a, b) => a.startedAt - b.startedAt);
+  const deviceParts = parts.filter((p) => p.trackId === "selected_device");
+  return deviceParts.length ? deviceParts : parts;
+}
+
+async function assemblePartWebm(
+  part: Part
+): Promise<{ blob: Blob; mimeType: string; chunkCount: number; size: number; missingIndex: boolean } | null> {
+  const chunks = (await storage.byIndex<Chunk>("chunks", "partId", part.id)).sort((a, b) => a.index - b.index);
+  if (!chunks.length) return null;
+  let missingIndex = false;
+  for (let i = 0; i < chunks.length; i++) {
+    if (chunks[i]!.index !== i && chunks[i]!.index !== chunks[0]!.index + i) {
+      // Allow non-zero start; detect gaps
+      if (i > 0 && chunks[i]!.index !== chunks[i - 1]!.index + 1) missingIndex = true;
+    }
+  }
+  const blobs = chunks.map((c) => c.blob);
+  const size = chunks.reduce((n, c) => n + c.size, 0);
+  const mimeType = part.mimeType || chunks[0]!.mimeType || "audio/webm";
+  return {
+    blob: new Blob(blobs, { type: mimeType }),
+    mimeType,
+    chunkCount: chunks.length,
+    size,
+    missingIndex
+  };
+}
+
+function extFromMime(mime: string): string {
+  if (/webm/i.test(mime)) return "webm";
+  if (/ogg/i.test(mime)) return "ogg";
+  if (/mp4|m4a|aac/i.test(mime)) return "m4a";
+  if (/wav/i.test(mime)) return "wav";
+  return "webm";
+}
+
+function scheduleRevoke(url: string, downloadId?: number) {
+  if (typeof downloadId === "number" && chrome.downloads?.onChanged) {
+    const onChanged = (delta: chrome.downloads.DownloadDelta) => {
+      if (delta.id !== downloadId) return;
+      if (delta.state?.current === "complete" || delta.state?.current === "interrupted" || delta.error) {
+        chrome.downloads.onChanged.removeListener(onChanged);
+        URL.revokeObjectURL(url);
+      }
+    };
+    chrome.downloads.onChanged.addListener(onChanged);
+    setTimeout(() => {
+      chrome.downloads.onChanged.removeListener(onChanged);
+      URL.revokeObjectURL(url);
+    }, 10 * 60 * 1000);
+  } else {
+    setTimeout(() => URL.revokeObjectURL(url), 120_000);
+  }
+}
+
+async function chromeDownload(url: string, filename: string, saveAs = false): Promise<number | undefined> {
+  if (!chrome.downloads?.download) throw new Error("DOWNLOADS_UNAVAILABLE");
+  return chrome.downloads.download({
+    url,
+    filename: `SafeCallRecorder/${filename}`,
+    saveAs,
+    conflictAction: "uniquify"
+  });
+}
+
+function anchorDownload(url: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+export async function prepareOriginalExport(sessionId: string): Promise<{
+  parts: Part[];
+  assembled: Array<{ part: Part; blob: Blob; mimeType: string; ok: boolean; error?: string }>;
+}> {
+  const parts = await partsForSession(sessionId);
+  const assembled: Array<{ part: Part; blob: Blob; mimeType: string; ok: boolean; error?: string }> = [];
+  for (const part of parts) {
+    try {
+      const one = await assemblePartWebm(part);
+      if (!one || one.size <= 0) {
+        assembled.push({ part, blob: new Blob(), mimeType: part.mimeType, ok: false, error: "empty" });
+        continue;
+      }
+      assembled.push({ part, blob: one.blob, mimeType: one.mimeType, ok: true });
+    } catch (e) {
+      assembled.push({
+        part,
+        blob: new Blob(),
+        mimeType: part.mimeType,
+        ok: false,
+        error: e instanceof Error ? e.message : String(e)
+      });
+    }
+  }
+  return { parts, assembled };
+}
+
+export async function downloadOriginalRecording(
+  sessionId: string,
+  options?: { saveAs?: boolean; trigger?: "auto" | "manual" }
+): Promise<OriginalDownloadResult> {
+  const existing = pendingOriginal.get(sessionId);
+  if (existing) return existing;
+
+  const task = (async (): Promise<OriginalDownloadResult> => {
+    const sessions = await storage.all<Session>("sessions");
+    const session = sessions.find((s) => s.id === sessionId);
+    if (!session) {
+      return { ok: false, kind: "none", partCount: 0, error: { code: "NOT_FOUND", message: "找不到录音" } };
+    }
+
+    const { assembled } = await prepareOriginalExport(sessionId);
+    const usable = assembled.filter((a) => a.ok && a.blob.size > 0);
+    if (!usable.length) {
+      session.originalStatus = "missing";
+      session.originalError = "没有可下载的原始录音数据。";
+      await storage.saveSession(session);
+      return {
+        ok: false,
+        kind: "none",
+        partCount: assembled.length,
+        error: { code: "NO_DATA", message: session.originalError }
+      };
+    }
+
+    const display = session.displayName || session.name;
+    const startedAt = session.startedAt;
+
+    try {
+      if (usable.length === 1) {
+        const one = usable[0]!;
+        const ext = extFromMime(one.mimeType);
+        const filename = buildOriginalFileName(display, startedAt, ext);
+        const url = URL.createObjectURL(one.blob);
+        try {
+          let downloadId: number | undefined;
+          try {
+            downloadId = await chromeDownload(url, filename, options?.saveAs === true);
+          } catch {
+            anchorDownload(url, filename);
+          }
+          scheduleRevoke(url, downloadId);
+          session.originalStatus = "available";
+          session.originalFileName = filename;
+          session.originalMimeType = one.mimeType;
+          session.originalError = undefined;
+          await storage.saveSession(session);
+          return {
+            ok: true,
+            kind: "webm",
+            filename,
+            downloadId,
+            partCount: 1
+          };
+        } catch (e) {
+          URL.revokeObjectURL(url);
+          throw e;
+        }
+      }
+
+      // Multi-part: ZIP with each playable part + session.json
+      const zipEntries: { name: string; data: Uint8Array }[] = [];
+      const meta = {
+        sessionId,
+        displayName: display,
+        startedAt,
+        endedAt: session.endedAt,
+        safeDurationMs: session.safeDurationMs,
+        parts: usable.map((u, i) => ({
+          file: `part_${String(i + 1).padStart(3, "0")}.${extFromMime(u.mimeType)}`,
+          partId: u.part.id,
+          mimeType: u.mimeType,
+          size: u.blob.size,
+          startedAt: u.part.startedAt,
+          endedAt: u.part.endedAt
+        }))
+      };
+      zipEntries.push({
+        name: "session.json",
+        data: new TextEncoder().encode(JSON.stringify(meta, null, 2))
+      });
+      for (let i = 0; i < usable.length; i++) {
+        const u = usable[i]!;
+        const name = `part_${String(i + 1).padStart(3, "0")}.${extFromMime(u.mimeType)}`;
+        zipEntries.push({ name, data: new Uint8Array(await u.blob.arrayBuffer()) });
+      }
+
+      const zipBlob = buildStoreZip(zipEntries);
+      const filename = buildRecoveryZipName(display, startedAt);
+      const url = URL.createObjectURL(zipBlob);
+      try {
+        let downloadId: number | undefined;
+        try {
+          downloadId = await chromeDownload(url, filename, options?.saveAs === true);
+        } catch {
+          anchorDownload(url, filename);
+        }
+        scheduleRevoke(url, downloadId);
+        session.originalStatus = "available";
+        session.originalFileName = filename;
+        session.originalMimeType = "application/zip";
+        session.originalError = undefined;
+        await storage.saveSession(session);
+        return { ok: true, kind: "zip", filename, downloadId, partCount: usable.length };
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        throw e;
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      session.originalStatus = "download_failed";
+      session.originalError = `自动下载未启动：${message}`;
+      await storage.saveSession(session);
+      return {
+        ok: false,
+        kind: usable.length > 1 ? "zip" : "webm",
+        partCount: usable.length,
+        error: { code: "DOWNLOAD_FAILED", message }
+      };
+    }
+  })().finally(() => {
+    pendingOriginal.delete(sessionId);
+  });
+
+  pendingOriginal.set(sessionId, task);
+  return task;
+}
+
+export { assemblePartWebm, partsForSession, formatStamp, sanitizeFileBase };

@@ -1,0 +1,8 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>SafeCallRecorder</title></head>
+<body class="popup"><h1>SafeCallRecorder</h1><p class="privacy">录音仅保存在本机，不会上传。</p>
+<label>录音来源<select id="mode"><option value="tab">当前网页声音</option><option value="device">指定声音设备</option><option value="both">网页声音＋指定设备</option></select></label>
+<label id="deviceRow">声音设备<select id="device"></select></label><button id="permission">允许查看声音设备</button><button id="refresh">刷新设备</button>
+<label><input type="checkbox" id="mixed"> 同时生成混合录音</label><label>音质<select id="bitrate"><option value="32000">节省空间（32 kbps）</option><option value="48000">日常通话（48 kbps）</option><option value="64000" selected>重要通话（64 kbps）</option><option value="96000">高质量（96 kbps）</option></select></label>
+<p id="route">真正的录音来源是上方选择的可录制设备。</p><meter id="level" min="0" max="1" value="0"></meter><p id="status">准备就绪</p><p id="duration">已安全保存：00:00</p>
+<div class="actions"><button id="test">测试3秒</button><button id="start">开始录音</button><button id="pause">暂停</button><button id="resume">继续</button><button id="stop">停止并导出</button></div>
+<button id="dashboard">打开录音管理页</button><p class="help">VoiceMeeter Input 的声音需在 VoiceMeeter 开启 B1/B2/B3，然后选择对应的 VoiceMeeter Out B1/B2/B3。</p><script src="popup.js"></script></body></html>

@@ -1,0 +1,159 @@
+export type SourceMode = "tab" | "device" | "both";
+
+/** Active capture / finalize lifecycle (independent of MP3). */
+export type SessionStatus =
+  | "starting"
+  | "recording"
+  | "paused"
+  | "interrupted"
+  | "exporting"
+  | "completed"
+  | "error";
+
+/** Recording finalize state (MP3 is not required for completion). */
+export type RecordingStatus = "starting" | "recording" | "paused" | "completed" | "interrupted" | "error";
+
+export type OriginalStatus = "pending" | "available" | "download_failed" | "missing";
+
+export type Mp3Status =
+  | "idle"
+  | "queued"
+  | "decoding"
+  | "encoding"
+  | "validating"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+export type TrackKind = "tab_audio" | "selected_device" | "mixed";
+
+/** Legacy UI label field — prefer recordingStatus + mp3Status. */
+export type HistoryStatus =
+  | "recording"
+  | "processing_mp3"
+  | "completed"
+  | "mp3_failed"
+  | "mp3_missing"
+  | "mp3_corrupted"
+  | "interrupted"
+  | "partial"
+  | "deleting";
+
+/** What to download / convert after stop. */
+export type StopDownloadMode =
+  | "original_then_mp3"
+  | "original_only"
+  | "mp3_only";
+
+export interface DeviceInfo {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
+  hint: string;
+}
+
+export interface Session {
+  id: string;
+  name: string;
+  mode: SourceMode;
+  status: SessionStatus;
+  startedAt: number;
+  endedAt?: number;
+  selectedDeviceId?: string;
+  selectedDeviceLabel?: string;
+  tabTitle?: string;
+  safeDurationMs: number;
+  lastSavedAt?: number;
+  recoveryCount: number;
+  interruptionReason?: string;
+  bitrate: number;
+  mixed: boolean;
+  /** User-facing optional title (may differ from auto name). */
+  displayName?: string;
+  historyStatus?: HistoryStatus;
+  durationMs?: number;
+  fileSize?: number;
+  mp3FileName?: string;
+  mp3MimeType?: string;
+  hasMp3?: boolean;
+  mp3Error?: string;
+  /** Split status fields (recording vs original export vs MP3). */
+  recordingStatus?: RecordingStatus;
+  originalStatus?: OriginalStatus;
+  mp3Status?: Mp3Status;
+  /** 0–100 while mp3Status is decoding/encoding. */
+  mp3Progress?: number;
+  /** Human-readable MP3 stage, e.g. "已处理 01:20:00 / 03:25:39". */
+  mp3ProgressLabel?: string;
+  originalError?: string;
+  originalFileName?: string;
+  originalMimeType?: string;
+}
+
+export interface Part {
+  id: string;
+  sessionId: string;
+  trackId: TrackKind;
+  startedAt: number;
+  endedAt?: number;
+  mimeType: string;
+  completed: boolean;
+  interruptionReason?: string;
+}
+
+export interface Chunk {
+  id: string;
+  sessionId: string;
+  partId: string;
+  trackId: TrackKind;
+  index: number;
+  startedAt: number;
+  endedAt: number;
+  durationMs: number;
+  size: number;
+  mimeType: string;
+  blob: Blob;
+}
+
+export interface Mp3File {
+  id: string;
+  sessionId: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  createdAt: number;
+  blob: Blob;
+}
+
+export interface AppSettings {
+  /** @deprecated Prefer stopDownloadMode + autoDownloadMp3AfterSuccess */
+  autoDownloadMp3: boolean;
+  /** Default: original_then_mp3 */
+  stopDownloadMode: StopDownloadMode;
+  /** Immediately download WebM/ZIP after stop. */
+  autoDownloadOriginal: boolean;
+  /** After background MP3 succeeds, download MP3. */
+  autoDownloadMp3AfterSuccess: boolean;
+  /** Keep original file as backup after MP3 download. */
+  keepOriginalAfterMp3: boolean;
+  defaultBitrate: number;
+  defaultDeviceId?: string;
+  /** Sound detection sensitivity: sensitive | standard | stable */
+  detectionSensitivity?: "sensitive" | "standard" | "stable";
+  /** When true, first-run onboarding card is hidden. */
+  onboardingDismissed?: boolean;
+}
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  autoDownloadMp3: true,
+  stopDownloadMode: "original_then_mp3",
+  autoDownloadOriginal: true,
+  autoDownloadMp3AfterSuccess: true,
+  keepOriginalAfterMp3: true,
+  defaultBitrate: 64000,
+  detectionSensitivity: "standard",
+  onboardingDismissed: false
+};
+
+export type Command = { action: string; [key: string]: unknown };
+export const id = () => crypto.randomUUID();
