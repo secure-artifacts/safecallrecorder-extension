@@ -16,9 +16,9 @@ export function detectLocalMediaKind(file: File): LocalMediaKind | null {
 }
 
 export function isLocalMediaEndedAutoStartEnabled(
-  settings: Pick<AppSettings, "autoStartRecording" | "autoStartOnLocalMediaEnded">
+  settings: Pick<AppSettings, "autoStartOnLocalMediaEnded">
 ): boolean {
-  return settings.autoStartRecording === true && settings.autoStartOnLocalMediaEnded !== false;
+  return settings.autoStartOnLocalMediaEnded !== false;
 }
 
 export function formatPlaybackTime(seconds: number): string {

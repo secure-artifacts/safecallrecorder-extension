@@ -253,13 +253,12 @@ async function handleLocalMediaEnded() {
   updateLocalMediaUi();
   const statusEl = $("localMediaStatus");
   statusEl.classList.remove("playing");
-  const fileName = localMediaLoaded?.file.name || "";
   if (!isLocalMediaEndedAutoStartEnabled(settings)) {
     statusEl.textContent = "播放已结束。可在设置中开启「插件内播放结束后自动开始」。";
     return;
   }
   statusEl.textContent = "播放已结束，正在自动开始录音…";
-  await tryAutoStartRecording("local_media_ended", { tabTitle: fileName, tabUrl: fileName });
+  await tryAutoStartRecording("local_media_ended");
 }
 
 function loadLocalMediaFile(file: File) {
@@ -283,10 +282,6 @@ function loadLocalMediaFile(file: File) {
   bindLocalMediaElement(target);
   $("localMediaPlayerWrap").classList.remove("hidden");
   $("localMediaFileName").textContent = file.name;
-  const suggested = suggestRecordingName(file.name, file.name);
-  if (suggested && !$<HTMLInputElement>("recName").value.trim()) {
-    $<HTMLInputElement>("recName").value = suggested;
-  }
   $("localMediaStatus").textContent = isLocalMediaEndedAutoStartEnabled(settings)
     ? "已加载。点击「播放」，播完后将自动开始录音。"
     : "已加载。点击「播放」开始；自动录音需在设置中开启。";
@@ -338,10 +333,13 @@ async function tryAutoStartRecording(
   reason: "sound_detected" | "local_media" | "local_media_ended",
   meta?: { tabTitle?: string; tabUrl?: string }
 ) {
-  if (!settings.autoStartRecording) return;
+  if (reason === "local_media_ended") {
+    if (settings.autoStartOnLocalMediaEnded === false) return;
+  } else if (!settings.autoStartRecording) {
+    return;
+  }
   if (reason === "sound_detected" && settings.autoStartOnSound === false) return;
   if (reason === "local_media" && settings.autoStartOnLocalMediaTab === false) return;
-  if (reason === "local_media_ended" && settings.autoStartOnLocalMediaEnded === false) return;
   if (recording || busy || autoStartPending) return;
   if (Date.now() < autoStartCooldownUntil) return;
   const deviceId = $<HTMLSelectElement>("device").value;
@@ -352,9 +350,11 @@ async function tryAutoStartRecording(
 
   autoStartPending = true;
   try {
-    const suggested = suggestRecordingName(meta?.tabTitle, meta?.tabUrl);
-    if (suggested && !$<HTMLInputElement>("recName").value.trim()) {
-      $<HTMLInputElement>("recName").value = suggested;
+    if (reason !== "local_media_ended") {
+      const suggested = suggestRecordingName(meta?.tabTitle, meta?.tabUrl);
+      if (suggested && !$<HTMLInputElement>("recName").value.trim()) {
+        $<HTMLInputElement>("recName").value = suggested;
+      }
     }
     setStatus(
       reason === "local_media"

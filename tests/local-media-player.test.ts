@@ -20,25 +20,10 @@ describe("local media player", () => {
     expect(formatPlaybackTime(3661)).toBe("01:01:01");
   });
 
-  it("requires master auto-start for ended playback", () => {
-    expect(
-      isLocalMediaEndedAutoStartEnabled({
-        autoStartRecording: true,
-        autoStartOnLocalMediaEnded: true
-      })
-    ).toBe(true);
-    expect(
-      isLocalMediaEndedAutoStartEnabled({
-        autoStartRecording: false,
-        autoStartOnLocalMediaEnded: true
-      })
-    ).toBe(false);
-    expect(
-      isLocalMediaEndedAutoStartEnabled({
-        autoStartRecording: true,
-        autoStartOnLocalMediaEnded: false
-      })
-    ).toBe(false);
+  it("enables post-play auto-start independently of master switch", () => {
+    expect(isLocalMediaEndedAutoStartEnabled({ autoStartOnLocalMediaEnded: true })).toBe(true);
+    expect(isLocalMediaEndedAutoStartEnabled({ autoStartOnLocalMediaEnded: undefined })).toBe(true);
+    expect(isLocalMediaEndedAutoStartEnabled({ autoStartOnLocalMediaEnded: false })).toBe(false);
   });
 
   it("dashboard exposes local media player UI and ended auto-start", () => {
@@ -48,6 +33,7 @@ describe("local media player", () => {
     expect(html).toContain('id="localMediaFile"');
     expect(html).toContain('id="autoStartOnLocalMediaEnded"');
     expect(dash).toContain("local_media_ended");
+    expect(dash).not.toContain('tryAutoStartRecording("local_media_ended",');
     expect(dash).toContain("localMediaPlaybackActive");
     expect(DEFAULT_SETTINGS.autoStartOnLocalMediaEnded).toBe(true);
   });
