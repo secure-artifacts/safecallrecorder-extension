@@ -2,6 +2,14 @@ import { HELP_CONTENT_VERSION, openDashboardPage } from "./help-nav";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+function setupHelpImages() {
+  for (const img of document.querySelectorAll<HTMLImageElement>("img[data-help-src]")) {
+    const rel = img.getAttribute("data-help-src");
+    if (!rel) continue;
+    img.src = chrome.runtime.getURL(rel);
+  }
+}
+
 function setupToc() {
   const links = document.querySelectorAll<HTMLAnchorElement>(".help-toc a[href^='#']");
   for (const a of links) {
@@ -44,6 +52,7 @@ $("openSettingsFromHelp").onclick = async () => {
 
 $("helpVersion").textContent = `使用说明版本：${HELP_CONTENT_VERSION}`;
 
+setupHelpImages();
 setupToc();
 setupBackTop();
 

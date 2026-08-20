@@ -15,6 +15,7 @@ export const MessageType = {
   GetMp3Url: "GET_MP3_URL",
   SaveSettings: "SAVE_SETTINGS",
   OpenHelp: "OPEN_HELP",
+  RequestAutoStart: "REQUEST_AUTO_START",
   RecordingHistoryChanged: "RECORDING_HISTORY_CHANGED",
   StorageGet: "STORAGE_GET",
   StorageSet: "STORAGE_SET",

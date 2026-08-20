@@ -25,6 +25,21 @@ import {
 } from "./extension-storage";
 import { openHelpPage } from "./help-nav";
 import { downloadOriginalRecording } from "./download/original-download-service";
+import { suggestRecordingName } from "./auto-start";
+import {
+  detectLocalMediaKind,
+  isLocalMediaEndedAutoStartEnabled,
+  type LocalMediaKind
+} from "./local-media-player";
+import { deviceHint } from "./device-manager";
+import {
+  compareSelectedWithBrowser,
+  formatChannels,
+  probeBrowserDefaultInput,
+  probeStereoFromStream,
+  readInputFromStream,
+  type InputDeviceInfo
+} from "./device-verify";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const fmt = (ms: number) => {
@@ -61,6 +76,313 @@ try {
   historyChannel = new BroadcastChannel(HISTORY_CHANNEL_NAME);
 } catch {
   historyChannel = undefined;
+}
+
+let previewHadSound = false;
+let autoStartCooldownUntil = 0;
+let autoStartPending = false;
+let cachedBrowserDefault: InputDeviceInfo | null = null;
+let verifyInFlight = false;
+let lastStereoProbeAt = 0;
+let localMediaPlaybackActive = false;
+let localMediaLoaded: { file: File; objectUrl: string; kind: LocalMediaKind } | undefined;
+
+function renderDeviceVerificationUi(
+  selected: InputDeviceInfo | null,
+  browser: InputDeviceInfo | null,
+  cmp: ReturnType<typeof compareSelectedWithBrowser>,
+  stereoLabel: string,
+  stereoClass: string
+) {
+  const pluginEl = $("verifyPluginLabel");
+  const browserEl = $("verifyBrowserLabel");
+  const channelsEl = $("verifyChannels");
+  const stereoEl = $("verifyStereo");
+  const resultEl = $("verifyResult");
+
+  if (selected?.label) {
+    pluginEl.textContent = `${selected.label}（${selected.hint}）`;
+  } else {
+    pluginEl.textContent = "未选择";
+  }
+
+  if (browser?.label) {
+    browserEl.textContent = `${browser.label}（${browser.hint}）`;
+  } else {
+    browserEl.textContent = "尚未读取（需授权后核对）";
+  }
+
+  channelsEl.textContent = cmp.channelNote || formatChannels(selected?.channelCount);
+  stereoEl.textContent = stereoLabel;
+  stereoEl.className = `device-verify-val ${stereoClass}`;
+
+  resultEl.textContent = `${cmp.title}。${cmp.detail}`;
+  resultEl.className = `device-verify-result ${cmp.ok ? "ok" : cmp.status === "browser_unknown" || cmp.status === "no_selection" ? "warn" : "fail"}`;
+}
+
+async function refreshDeviceVerification(forceBrowserProbe = false) {
+  if (verifyInFlight) return;
+  verifyInFlight = true;
+  try {
+    const deviceId = $<HTMLSelectElement>("device").value;
+    const selectedMeta = devices.find((d) => d.deviceId === deviceId);
+    const selectedFromPreview = readInputFromStream(preview?.stream);
+    const selected: InputDeviceInfo | null = deviceId
+      ? {
+          deviceId,
+          label: selectedMeta?.label?.trim() || selectedFromPreview?.label || "声音设备",
+          hint: deviceHint(selectedMeta?.label || selectedFromPreview?.label || ""),
+          channelCount: selectedFromPreview?.channelCount,
+          sampleRate: selectedFromPreview?.sampleRate
+        }
+      : null;
+
+    if (forceBrowserProbe || !cachedBrowserDefault) {
+      const wasPreview = !!preview;
+      if (wasPreview) await stopPreview();
+      cachedBrowserDefault = await probeBrowserDefaultInput();
+      if (wasPreview && !recording && !busy) await startPreview();
+    }
+
+    const cmp = compareSelectedWithBrowser(selected, cachedBrowserDefault);
+    let stereoLabel = "播放测试音后可检测左右声道";
+    let stereoClass = "";
+    if (preview?.stream && selected?.channelCount && selected.channelCount >= 2) {
+      stereoLabel = "立体声设备 · 等待音浪信号…";
+    } else if (selected?.channelCount === 1) {
+      stereoLabel = "单声道输入";
+      stereoClass = "stereo-ok";
+    }
+
+    renderDeviceVerificationUi(selected, cachedBrowserDefault, cmp, stereoLabel, stereoClass);
+  } finally {
+    verifyInFlight = false;
+  }
+}
+
+async function maybeProbeStereoFromPreview() {
+  if (!preview?.stream || recording || busy) return;
+  const now = Date.now();
+  if (now - lastStereoProbeAt < 2500) return;
+  const info = readInputFromStream(preview.stream);
+  if (!info || (info.channelCount || 1) < 2) return;
+  if (!previewHadSound) return;
+
+  lastStereoProbeAt = now;
+  const stereo = await probeStereoFromStream(preview.stream);
+  const selected: InputDeviceInfo = {
+    deviceId: info.deviceId,
+    label: info.label,
+    hint: info.hint,
+    channelCount: info.channelCount,
+    sampleRate: info.sampleRate
+  };
+  const cmp = compareSelectedWithBrowser(selected, cachedBrowserDefault);
+  const stereoClass =
+    stereo.state === "stereo_balanced" ? "stereo-ok" : stereo.state === "silent" ? "" : "stereo-warn";
+  renderDeviceVerificationUi(selected, cachedBrowserDefault, cmp, stereo.label, stereoClass);
+}
+
+function updateLocalMediaUi() {
+  const playBtn = $<HTMLButtonElement>("localMediaPlayBtn");
+  const stopBtn = $<HTMLButtonElement>("localMediaStopBtn");
+  const blocked = recording || busy || !localMediaLoaded;
+  playBtn.disabled = blocked || localMediaPlaybackActive;
+  stopBtn.disabled = recording || busy || !localMediaLoaded;
+  stopBtn.classList.toggle("hidden", !localMediaLoaded);
+}
+
+function clearLocalMedia() {
+  const video = $<HTMLVideoElement>("localMediaVideo");
+  const audio = $<HTMLAudioElement>("localMediaAudio");
+  video.pause();
+  audio.pause();
+  video.removeAttribute("src");
+  audio.removeAttribute("src");
+  video.load();
+  audio.load();
+  video.classList.add("hidden");
+  audio.classList.add("hidden");
+  video.onplay = video.onpause = video.onended = video.onerror = null;
+  audio.onplay = audio.onpause = audio.onended = audio.onerror = null;
+  $("localMediaPlayerWrap").classList.add("hidden");
+  if (localMediaLoaded) {
+    try {
+      URL.revokeObjectURL(localMediaLoaded.objectUrl);
+    } catch {
+      /* ignore */
+    }
+  }
+  localMediaLoaded = undefined;
+  localMediaPlaybackActive = false;
+  updateLocalMediaUi();
+}
+
+function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
+  el.onplay = () => {
+    localMediaPlaybackActive = true;
+    previewHadSound = false;
+    updateLocalMediaUi();
+    const statusEl = $("localMediaStatus");
+    statusEl.textContent = isLocalMediaEndedAutoStartEnabled(settings)
+      ? "正在播放… 结束后将自动开始录音。"
+      : "正在播放…";
+    statusEl.classList.add("playing");
+  };
+  el.onpause = () => {
+    if (!el.ended) {
+      localMediaPlaybackActive = false;
+      updateLocalMediaUi();
+      $("localMediaStatus").classList.remove("playing");
+      $("localMediaStatus").textContent = "播放已暂停。";
+    }
+  };
+  el.onended = () => {
+    void handleLocalMediaEnded();
+  };
+  el.onerror = () => {
+    localMediaPlaybackActive = false;
+    updateLocalMediaUi();
+    $("localMediaStatus").classList.remove("playing");
+    $("localMediaStatus").textContent = "无法播放该文件，请换一个格式试试。";
+  };
+}
+
+async function handleLocalMediaEnded() {
+  localMediaPlaybackActive = false;
+  updateLocalMediaUi();
+  const statusEl = $("localMediaStatus");
+  statusEl.classList.remove("playing");
+  const fileName = localMediaLoaded?.file.name || "";
+  if (!isLocalMediaEndedAutoStartEnabled(settings)) {
+    statusEl.textContent = "播放已结束。可在设置中开启「插件内播放结束后自动开始」。";
+    return;
+  }
+  statusEl.textContent = "播放已结束，正在自动开始录音…";
+  await tryAutoStartRecording("local_media_ended", { tabTitle: fileName, tabUrl: fileName });
+}
+
+function loadLocalMediaFile(file: File) {
+  clearLocalMedia();
+  const kind = detectLocalMediaKind(file);
+  if (!kind) {
+    $("localMediaFileName").textContent = file.name;
+    $("localMediaStatus").textContent = "不支持的文件类型。请选择 mp4、webm、mp3、wav 等常见格式。";
+    return;
+  }
+  const objectUrl = URL.createObjectURL(file);
+  localMediaLoaded = { file, objectUrl, kind };
+  const video = $<HTMLVideoElement>("localMediaVideo");
+  const audio = $<HTMLAudioElement>("localMediaAudio");
+  const target = kind === "video" ? video : audio;
+  const other = kind === "video" ? audio : video;
+  other.classList.add("hidden");
+  other.removeAttribute("src");
+  target.classList.remove("hidden");
+  target.src = objectUrl;
+  bindLocalMediaElement(target);
+  $("localMediaPlayerWrap").classList.remove("hidden");
+  $("localMediaFileName").textContent = file.name;
+  const suggested = suggestRecordingName(file.name, file.name);
+  if (suggested && !$<HTMLInputElement>("recName").value.trim()) {
+    $<HTMLInputElement>("recName").value = suggested;
+  }
+  $("localMediaStatus").textContent = isLocalMediaEndedAutoStartEnabled(settings)
+    ? "已加载。点击「播放」，播完后将自动开始录音。"
+    : "已加载。点击「播放」开始；自动录音需在设置中开启。";
+  updateLocalMediaUi();
+}
+
+async function playLocalMedia() {
+  if (!localMediaLoaded || recording || busy) return;
+  const el =
+    localMediaLoaded.kind === "video"
+      ? $<HTMLVideoElement>("localMediaVideo")
+      : $<HTMLAudioElement>("localMediaAudio");
+  try {
+    await el.play();
+  } catch (e) {
+    localMediaPlaybackActive = false;
+    updateLocalMediaUi();
+    $("localMediaStatus").textContent = friendlyError(e instanceof Error ? e.message : String(e));
+  }
+}
+
+function stopLocalMediaPlayback() {
+  if (!localMediaLoaded) return;
+  const el =
+    localMediaLoaded.kind === "video"
+      ? $<HTMLVideoElement>("localMediaVideo")
+      : $<HTMLAudioElement>("localMediaAudio");
+  el.pause();
+  try {
+    el.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+  localMediaPlaybackActive = false;
+  updateLocalMediaUi();
+  $("localMediaStatus").classList.remove("playing");
+  $("localMediaStatus").textContent = "播放已停止。";
+}
+
+async function persistDefaultDevice() {
+  const deviceId = $<HTMLSelectElement>("device").value;
+  if (deviceId) {
+    settings.defaultDeviceId = deviceId;
+    await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+  }
+}
+
+async function tryAutoStartRecording(
+  reason: "sound_detected" | "local_media" | "local_media_ended",
+  meta?: { tabTitle?: string; tabUrl?: string }
+) {
+  if (!settings.autoStartRecording) return;
+  if (reason === "sound_detected" && settings.autoStartOnSound === false) return;
+  if (reason === "local_media" && settings.autoStartOnLocalMediaTab === false) return;
+  if (reason === "local_media_ended" && settings.autoStartOnLocalMediaEnded === false) return;
+  if (recording || busy || autoStartPending) return;
+  if (Date.now() < autoStartCooldownUntil) return;
+  const deviceId = $<HTMLSelectElement>("device").value;
+  if (!deviceId || !devices.length) {
+    setStatus("请先选择声音设备，才能自动开始录音。");
+    return;
+  }
+
+  autoStartPending = true;
+  try {
+    const suggested = suggestRecordingName(meta?.tabTitle, meta?.tabUrl);
+    if (suggested && !$<HTMLInputElement>("recName").value.trim()) {
+      $<HTMLInputElement>("recName").value = suggested;
+    }
+    setStatus(
+      reason === "local_media"
+        ? "检测到本地媒体播放，正在自动开始录音…"
+        : reason === "local_media_ended"
+          ? "本地媒体播放已结束，正在自动开始录音…"
+          : "检测到声音，正在自动开始录音…"
+    );
+    console.info("[AutoStart]", { stage: "dashboard_start", reason, deviceId });
+    await startRecording();
+  } catch (e) {
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+  } finally {
+    autoStartPending = false;
+  }
+}
+
+function syncAutoStartSettingsUi() {
+  const master = $<HTMLInputElement>("autoStartRecording");
+  const localTab = $<HTMLInputElement>("autoStartOnLocalMediaTab");
+  const localEnded = $<HTMLInputElement>("autoStartOnLocalMediaEnded");
+  if (master) master.checked = settings.autoStartRecording === true;
+  if (localTab) localTab.checked = settings.autoStartOnLocalMediaTab !== false;
+  if (localEnded) localEnded.checked = settings.autoStartOnLocalMediaEnded !== false;
+}
+
+async function persistAutoStartSettings() {
+  await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
 }
 
 async function ask(type: Request["type"], payload: Record<string, unknown> = {}) {
@@ -318,6 +640,7 @@ function renderDevices(list: MediaDeviceInfo[]) {
     $("permCard").classList.add("hidden");
   }
   $<HTMLButtonElement>("start").disabled = recording || busy || !list.length;
+  void refreshDeviceVerification(false);
 }
 
 async function refreshDevices() {
@@ -326,6 +649,7 @@ async function refreshDevices() {
     devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
     renderDevices(devices);
     if (!recording) await startPreview();
+    await refreshDeviceVerification(true);
   } catch (e) {
     $("deviceMsg").textContent = friendlyError(e instanceof Error ? e.message : String(e));
   }
@@ -338,6 +662,7 @@ async function requestPermission() {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     await refreshDevices();
     $("deviceMsg").textContent = "";
+    await refreshDeviceVerification(true);
   } catch (e) {
     $("deviceMsg").textContent = friendlyError(e instanceof Error ? e.message : String(e));
   } finally {
@@ -371,13 +696,28 @@ async function startPreview() {
     }
     const monitor = new StreamLevelMonitor("preview", "test", label, stream);
     monitor.setSensitivity(settings.detectionSensitivity || "standard");
+    previewHadSound = false;
     monitor.onUpdate((u) => {
       if (recording || getRecordingFlag()) return;
       applyLevelUpdate($("liveMonitor"), u);
+      const hasStableSound =
+        u.hasSound || u.soundState === "has_sound" || u.soundState === "low_volume" || u.soundState === "clipping";
+      if (
+        settings.autoStartRecording &&
+        settings.autoStartOnSound !== false &&
+        hasStableSound &&
+        !previewHadSound &&
+        !localMediaPlaybackActive
+      ) {
+        void tryAutoStartRecording("sound_detected");
+      }
+      previewHadSound = hasStableSound;
+      void maybeProbeStereoFromPreview();
     });
     monitor.start();
     preview = { stream, monitor };
     setWaveformMode("preview");
+    void refreshDeviceVerification(false);
   } catch (e) {
     $("deviceMsg").textContent = friendlyError(e instanceof Error ? e.message : String(e));
     setWaveformMode("error");
@@ -724,6 +1064,7 @@ async function refresh() {
     }
     if (data.settings) settings = { ...DEFAULT_SETTINGS, ...data.settings };
     syncDownloadSettingsUi();
+    syncAutoStartSettingsUi();
     const sens = $<HTMLSelectElement>("detectionSensitivity");
     if (sens) sens.value = settings.detectionSensitivity || "standard";
     const active = data.active[0];
@@ -784,7 +1125,9 @@ async function startRecording() {
     setTimeout(() => $("lowQualityNote").classList.add("hidden"), 4000);
   }
   busy = true;
+  stopLocalMediaPlayback();
   $<HTMLButtonElement>("start").disabled = true;
+  updateLocalMediaUi();
   $<HTMLButtonElement>("start").textContent = "正在启动……";
   setStatus("正在启动……");
   try {
@@ -819,6 +1162,7 @@ async function startRecording() {
       updateBitrateCard();
     }, 250);
     await persistBitrate(bitrate);
+    await persistDefaultDevice();
   } catch (e) {
     recording = false;
     setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
@@ -827,6 +1171,7 @@ async function startRecording() {
   } finally {
     busy = false;
     $<HTMLButtonElement>("start").textContent = "开始录音";
+    updateLocalMediaUi();
   }
 }
 
@@ -874,6 +1219,8 @@ async function stopRecording() {
     }
 
     await startPreview();
+    previewHadSound = false;
+    autoStartCooldownUntil = Date.now() + 2500;
     await refresh();
   } catch (e) {
     setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
@@ -881,6 +1228,7 @@ async function stopRecording() {
     busy = false;
     $<HTMLButtonElement>("start").disabled = !devices.length;
     $<HTMLButtonElement>("stop").disabled = true;
+    updateLocalMediaUi();
   }
 }
 
@@ -919,7 +1267,20 @@ $("bitrateDetailsToggle").onclick = () => {
   const open = !panel.classList.toggle("hidden");
   $("bitrateDetailsToggle").textContent = open ? "收起详细说明" : "查看详细说明";
 };
-$("device").onchange = () => void startPreview();
+$("device").onchange = () => {
+  cachedBrowserDefault = null;
+  void persistDefaultDevice();
+  void startPreview();
+};
+$("verifyDeviceBtn").onclick = () => void refreshDeviceVerification(true);
+$("localMediaFile").onchange = () => {
+  const file = $<HTMLInputElement>("localMediaFile").files?.[0];
+  if (!file) return;
+  loadLocalMediaFile(file);
+  $<HTMLInputElement>("localMediaFile").value = "";
+};
+$("localMediaPlayBtn").onclick = () => void playLocalMedia();
+$("localMediaStopBtn").onclick = () => stopLocalMediaPlayback();
 $("start").onclick = () => void startRecording();
 $("stop").onclick = () => void stopRecording();
 $("settingsBtn").onclick = () => $("settingsPanel").classList.toggle("hidden");
@@ -988,7 +1349,31 @@ $("detectionSensitivity").onchange = async () => {
   settings.detectionSensitivity =
     v === "sensitive" || v === "stable" ? v : "standard";
   await ask(MessageType.SaveSettings, { ...settings });
+  previewHadSound = false;
   if (!recording) await startPreview();
+};
+$("autoStartRecording").onchange = async () => {
+  settings.autoStartRecording = $<HTMLInputElement>("autoStartRecording").checked;
+  if (settings.autoStartRecording) {
+    settings.autoStartOnSound = true;
+    settings.autoStartOnLocalMediaTab = settings.autoStartOnLocalMediaTab !== false;
+    settings.autoStartOnLocalMediaEnded = settings.autoStartOnLocalMediaEnded !== false;
+  }
+  syncAutoStartSettingsUi();
+  previewHadSound = false;
+  await persistAutoStartSettings();
+};
+$("autoStartOnLocalMediaTab").onchange = async () => {
+  settings.autoStartOnLocalMediaTab = $<HTMLInputElement>("autoStartOnLocalMediaTab").checked;
+  settings.autoStartRecording = true;
+  $<HTMLInputElement>("autoStartRecording").checked = true;
+  await persistAutoStartSettings();
+};
+$("autoStartOnLocalMediaEnded").onchange = async () => {
+  settings.autoStartOnLocalMediaEnded = $<HTMLInputElement>("autoStartOnLocalMediaEnded").checked;
+  settings.autoStartRecording = true;
+  $<HTMLInputElement>("autoStartRecording").checked = true;
+  await persistAutoStartSettings();
 };
 $("defaultBitrate").onchange = async () => {
   settings.defaultBitrate = resolveBitrate(Number($<HTMLSelectElement>("defaultBitrate").value));
@@ -1113,6 +1498,14 @@ $("clearAll").onclick = () => void $("clearHistory").click();
 
 
 chrome.runtime.onMessage.addListener((msg: AudioLevelUpdate | Request) => {
+  if (msg && "type" in msg && msg.type === MessageType.RequestAutoStart) {
+    const payload = (msg as Request).payload || {};
+    void tryAutoStartRecording("local_media", {
+      tabTitle: String(payload.tabTitle || ""),
+      tabUrl: String(payload.tabUrl || "")
+    });
+    return;
+  }
   if (msg && "type" in msg && msg.type === MessageType.RecordingHistoryChanged) {
     const ids = (msg.payload?.deletedSessionIds as string[] | undefined) || [];
     applyRemoteHistoryChange(ids);
@@ -1136,6 +1529,7 @@ if (historyChannel) {
 navigator.mediaDevices?.addEventListener("devicechange", () => void refreshDevices());
 window.addEventListener("beforeunload", () => {
   void stopPreview();
+  clearLocalMedia();
   void ask(MessageType.UnsubscribeLevels).catch(() => undefined);
 });
 
@@ -1171,6 +1565,8 @@ void (async () => {
   await ask(MessageType.SubscribeLevels).catch(() => undefined);
   await refresh();
   syncOnboardingCard();
+  syncAutoStartSettingsUi();
+  updateLocalMediaUi();
   if (new URLSearchParams(location.search).get("openSettings") === "1") {
     $("settingsPanel").classList.remove("hidden");
   }

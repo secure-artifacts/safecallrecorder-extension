@@ -142,6 +142,14 @@ export interface AppSettings {
   detectionSensitivity?: "sensitive" | "standard" | "stable";
   /** When true, first-run onboarding card is hidden. */
   onboardingDismissed?: boolean;
+  /** Master switch: allow automatic recording start. */
+  autoStartRecording?: boolean;
+  /** Auto start when preview monitor detects stable sound on selected device. */
+  autoStartOnSound?: boolean;
+  /** Auto start when a local media tab (file://, video/audio file) begins playing. */
+  autoStartOnLocalMediaTab?: boolean;
+  /** Auto start when in-dashboard local media player reaches end. */
+  autoStartOnLocalMediaEnded?: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -152,8 +160,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   keepOriginalAfterMp3: true,
   defaultBitrate: 64000,
   detectionSensitivity: "standard",
-  onboardingDismissed: false
+  onboardingDismissed: false,
+  autoStartRecording: false,
+  autoStartOnSound: true,
+  autoStartOnLocalMediaTab: true,
+  autoStartOnLocalMediaEnded: true
 };
 
-export type Command = { action: string; [key: string]: unknown };
 export const id = () => crypto.randomUUID();

@@ -58,6 +58,11 @@
         </select>
       </label>
       <p class="hint">标准适合普通通话：短暂停顿不会立刻显示“没有声音”。</p>
+      <label class="row"><span>检测到声音后自动开始录音</span><input type="checkbox" id="autoStartRecording"></label>
+      <label class="row"><span>浏览器标签页播放本地媒体时自动开始</span><input type="checkbox" id="autoStartOnLocalMediaTab"></label>
+      <label class="row"><span>插件内播放结束后自动开始</span><input type="checkbox" id="autoStartOnLocalMediaEnded"></label>
+      <p class="hint">「标签页」：在浏览器中打开 mp3/mp4 并开始播放时自动录音。「插件内」：在下方播放器播完后再自动开始，播放过程中不会提前录音。</p>
+      <p class="hint">请确保所选设备能收到播放声音（例如 VoiceMeeter Out B1）。</p>
       <button type="button" id="showOnboardingAgain" class="btn outline small">重新显示新手引导</button>
       <p class="hint">下载文件通常在浏览器的“下载”文件夹。请在浏览器下载设置中查看。</p>
       <p class="hint">隐私：录音只保存在本机浏览器存储中，不会上传。</p>
@@ -82,6 +87,53 @@
         <button type="button" id="permission" class="btn secondary">授权设备</button>
       </div>
       <p id="deviceMsg" class="msg"></p>
+
+      <div id="deviceVerifyCard" class="device-verify-card">
+        <div class="device-verify-head">
+          <strong>设备核对</strong>
+          <button type="button" id="verifyDeviceBtn" class="linkish">重新核对</button>
+        </div>
+        <div class="device-verify-grid">
+          <div class="device-verify-row">
+            <span class="device-verify-key">插件当前选择</span>
+            <span id="verifyPluginLabel" class="device-verify-val">—</span>
+          </div>
+          <div class="device-verify-row">
+            <span class="device-verify-key">浏览器默认输入</span>
+            <span id="verifyBrowserLabel" class="device-verify-val">—</span>
+          </div>
+          <div class="device-verify-row">
+            <span class="device-verify-key">声道</span>
+            <span id="verifyChannels" class="device-verify-val">—</span>
+          </div>
+          <div class="device-verify-row">
+            <span class="device-verify-key">立体声</span>
+            <span id="verifyStereo" class="device-verify-val">—</span>
+          </div>
+        </div>
+        <p id="verifyResult" class="device-verify-result">选择设备后将显示核对结果。</p>
+      </div>
+
+      <section id="localMediaCard" class="local-media-card">
+        <div class="local-media-head">
+          <strong>本地媒体播放</strong>
+          <span class="local-media-sub">播完后自动开始录音</span>
+        </div>
+        <div class="local-media-controls">
+          <label class="btn outline small local-media-pick">
+            选择本地文件
+            <input type="file" id="localMediaFile" class="local-media-file-input" accept="video/*,audio/*,.mp4,.webm,.mkv,.mov,.avi,.mp3,.wav,.m4a,.ogg,.opus,.aac,.flac">
+          </label>
+          <button type="button" id="localMediaPlayBtn" class="btn secondary small" disabled>播放</button>
+          <button type="button" id="localMediaStopBtn" class="btn outline small hidden" disabled>停止</button>
+        </div>
+        <p id="localMediaFileName" class="local-media-file-name">未选择文件</p>
+        <div id="localMediaPlayerWrap" class="local-media-player-wrap hidden">
+          <video id="localMediaVideo" controls playsinline class="local-media-video hidden"></video>
+          <audio id="localMediaAudio" controls class="local-media-audio hidden"></audio>
+        </div>
+        <p id="localMediaStatus" class="hint local-media-status">选择 mp4、mp3 等本地文件并播放；播放结束后将自动开始录音（需在设置中开启）。</p>
+      </section>
 
       <div id="liveMonitor" class="live-monitor" aria-live="polite"></div>
 

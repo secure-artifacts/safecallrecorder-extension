@@ -1,4 +1,5 @@
-import { MessageType, type Request, failure } from "./messages";
+import { isLocalMediaUrl, suggestRecordingName } from "./auto-start";
+import { MessageType, requestId, type Request, failure } from "./messages";
 import { DEFAULT_SETTINGS, type AppSettings } from "./types";
 import {
   setSessionSourceTab,
@@ -11,6 +12,14 @@ import { openHelpPage } from "./help-nav";
 let creating: Promise<void> | undefined;
 let openingDashboard: Promise<void> | undefined;
 const dashboardUrl = chrome.runtime.getURL("dashboard.html");
+
+let autoStartCooldownUntil = 0;
+let autoStartInFlight = false;
+
+async function loadSettings(): Promise<AppSettings> {
+  const cur = await storageGetDirect("settings");
+  return { ...DEFAULT_SETTINGS, ...(cur.settings as AppSettings | undefined) };
+}
 
 async function ensureOffscreen() {
   const url = chrome.runtime.getURL("offscreen.html");
@@ -29,7 +38,7 @@ async function ensureOffscreen() {
   return creating;
 }
 
-async function openDashboard(sourceTab?: chrome.tabs.Tab) {
+async function openDashboard(sourceTab?: chrome.tabs.Tab): Promise<void> {
   const sourceTabId = sourceTab?.id ?? null;
   await setSessionSourceTab({
     latestSourceTabId: sourceTabId,
@@ -44,6 +53,107 @@ async function openDashboard(sourceTab?: chrome.tabs.Tab) {
   }
   await chrome.tabs.create({ url: dashboardUrl });
 }
+
+async function isRecordingActive(): Promise<boolean> {
+  try {
+    await ensureOffscreen();
+    const res = await chrome.runtime.sendMessage({
+      type: MessageType.GetState,
+      target: "offscreen",
+      requestId: requestId()
+    } satisfies Request);
+    const active = (res as { data?: { active?: unknown[] } })?.data?.active;
+    return Array.isArray(active) && active.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function notifyDashboardAutoStart(payload: Record<string, unknown>) {
+  const dashboards = await chrome.tabs.query({ url: `${dashboardUrl}*` });
+  const tab = dashboards[0];
+  if (!tab?.id) return false;
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      type: MessageType.RequestAutoStart,
+      target: "dashboard",
+      requestId: requestId(),
+      payload
+    } satisfies Request);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function startRecordingInBackground(settings: AppSettings, meta: { tabTitle?: string; tabUrl?: string }) {
+  const deviceId = settings.defaultDeviceId;
+  if (!deviceId) {
+    console.info("[AutoStart] no defaultDeviceId, opening dashboard");
+    return false;
+  }
+  await ensureOffscreen();
+  const displayName = suggestRecordingName(meta.tabTitle, meta.tabUrl);
+  const res = await chrome.runtime.sendMessage({
+    type: MessageType.StartRecording,
+    target: "offscreen",
+    requestId: requestId(),
+    payload: {
+      mode: "device",
+      deviceId,
+      deviceLabel: "声音设备",
+      displayName,
+      bitrate: settings.defaultBitrate || DEFAULT_SETTINGS.defaultBitrate,
+      mixed: false
+    }
+  } satisfies Request);
+  if (!(res as { ok?: boolean })?.ok) {
+    console.warn("[AutoStart] background start failed", res);
+    return false;
+  }
+  console.info("[AutoStart] background recording started", { deviceId, displayName });
+  return true;
+}
+
+async function handleLocalMediaAutoStart(tab: chrome.tabs.Tab) {
+  if (autoStartInFlight) return;
+  if (Date.now() < autoStartCooldownUntil) return;
+  const settings = await loadSettings();
+  if (!settings.autoStartRecording || settings.autoStartOnLocalMediaTab === false) return;
+  if (!(await isLocalMediaUrl(tab.url))) return;
+  if (await isRecordingActive()) return;
+
+  autoStartInFlight = true;
+  try {
+    console.info("[AutoStart]", { stage: "local_media_detected", tabId: tab.id, url: tab.url });
+    const payload = {
+      reason: "local_media",
+      tabId: tab.id,
+      tabTitle: tab.title,
+      tabUrl: tab.url
+    };
+    const sent = await notifyDashboardAutoStart(payload);
+    if (sent) return;
+
+    const started = await startRecordingInBackground(settings, {
+      tabTitle: tab.title,
+      tabUrl: tab.url
+    });
+    if (started) {
+      await openDashboard(tab);
+      return;
+    }
+    await openDashboard(tab);
+    await notifyDashboardAutoStart(payload);
+  } finally {
+    autoStartInFlight = false;
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.audible !== true) return;
+  void handleLocalMediaAutoStart({ ...tab, id: tabId });
+});
 
 chrome.action.onClicked.addListener((tab) => {
   openingDashboard ??= openDashboard(tab)
@@ -104,6 +214,10 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, reply) => {
       await ensureOffscreen();
       const forwarded: Request = { ...msg, target: "offscreen", payload: { ...msg.payload, mode: "device" } };
       return reply(await chrome.runtime.sendMessage(forwarded));
+    }
+
+    if (msg.type === MessageType.StopRecording) {
+      autoStartCooldownUntil = Date.now() + 2500;
     }
 
     if (FORWARD.has(msg.type)) {

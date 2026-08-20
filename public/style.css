@@ -123,6 +123,103 @@ input[type="text"]:focus, select:focus {
 
 .device-row { display: flex; gap: 8px; align-items: end; margin-bottom: 8px; }
 .device-row .grow { flex: 1; margin: 0; }
+.device-verify-card {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.device-verify-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.device-verify-grid { display: grid; gap: 6px; }
+.device-verify-row {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 8px;
+  font-size: 13px;
+  align-items: start;
+}
+.device-verify-key { color: var(--muted); font-weight: 600; }
+.device-verify-val { color: var(--text); font-weight: 600; word-break: break-word; }
+.device-verify-result {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #475569;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+.device-verify-result.ok { border-color: #99f6e4; background: #f0fdfa; color: #0f766e; }
+.device-verify-result.warn { border-color: #fde68a; background: #fffbeb; color: #a16207; }
+.device-verify-result.fail { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+.device-verify-val.stereo-ok { color: #0f766e; }
+.device-verify-val.stereo-warn { color: #a16207; }
+
+.local-media-card {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.local-media-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.local-media-sub { font-size: 12px; color: var(--muted); font-weight: 600; }
+.local-media-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.local-media-pick {
+  position: relative;
+  overflow: hidden;
+  margin: 0;
+  cursor: pointer;
+}
+.local-media-file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.local-media-file-name {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+}
+.local-media-player-wrap { margin-bottom: 8px; }
+.local-media-video {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  border-radius: 10px;
+  background: #000;
+}
+.local-media-audio {
+  display: block;
+  width: 100%;
+}
+.local-media-status { margin: 0; }
+.local-media-status.playing { color: #0f766e; font-weight: 600; }
+
 .icon-btn {
   width: 42px; height: 42px;
   border: 1px solid var(--line);

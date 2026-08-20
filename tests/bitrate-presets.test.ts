@@ -10,8 +10,10 @@ import {
 } from "../src/bitrate-presets";
 
 describe("bitrate presets", () => {
-  it("includes 16 kbps and ordered list", () => {
-    expect(BITRATE_PRESETS.map((p) => p.bitrate)).toEqual([16000, 32000, 48000, 64000, 96000, 128000]);
+  it("includes fine-grained voice presets in ascending order", () => {
+    expect(BITRATE_PRESETS.map((p) => p.bitrate)).toEqual([
+      16000, 24000, 32000, 40000, 48000, 56000, 64000, 80000, 96000, 112000, 128000
+    ]);
   });
 
   it("defaults to 64 kbps", () => {
@@ -48,6 +50,8 @@ describe("bitrate presets", () => {
   it("resolves unsupported bitrates to nearest preset", () => {
     expect(resolveBitrate(70000)).toBe(64000);
     expect(resolveBitrate(20000)).toBe(16000);
+    expect(resolveBitrate(55000)).toBe(56000);
+    expect(resolveBitrate(100000)).toBe(96000);
   });
 
   it("keeps capture quality at or above target and floors low targets", () => {

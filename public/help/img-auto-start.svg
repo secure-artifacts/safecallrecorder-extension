@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 320" role="img" aria-label="自动录音设置示意">
+  <rect width="640" height="320" fill="#f1f5f9"/>
+  <rect x="20" y="16" width="600" height="288" rx="14" fill="#fff" stroke="#e2e8f0"/>
+  <text x="36" y="44" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="15" font-weight="700" fill="#0f172a">设置</text>
+  <rect x="36" y="58" width="568" height="34" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="48" y="79" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#334155">检测到声音后自动开始录音</text>
+  <rect x="572" y="68" width="22" height="14" rx="4" fill="#0f766e"/>
+  <rect x="36" y="100" width="568" height="34" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="48" y="121" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#334155">浏览器标签页播放本地媒体时自动开始</text>
+  <rect x="572" y="110" width="22" height="14" rx="4" fill="#cbd5e1"/>
+  <rect x="36" y="142" width="568" height="34" rx="8" fill="#f0fdfa" stroke="#99f6e4"/>
+  <text x="48" y="163" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#0f766e">插件内播放结束后自动开始</text>
+  <rect x="572" y="152" width="22" height="14" rx="4" fill="#0f766e"/>
+  <text x="36" y="200" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#64748b">标签页：播放时自动录音。插件内：播完后再自动开始。</text>
+  <rect x="36" y="236" width="568" height="52" rx="8" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="48" y="258" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" font-weight="700" fill="#92400e">新手推荐</text>
+  <text x="48" y="276" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#92400e">先播本地视频，播完再录通话：勾选插件内播放结束后自动开始。</text>
+</svg>

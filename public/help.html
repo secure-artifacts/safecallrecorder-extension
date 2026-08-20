@@ -11,7 +11,7 @@
     <header class="help-top">
       <div class="help-brand">
         <h1>SafeCallRecorder 使用说明</h1>
-        <p>选择声音设备，确认有声音，然后开始录音。</p>
+        <p>图文新手教程：选设备 → 核对 → 播放本地媒体（可选）→ 开始录音。</p>
       </div>
       <div class="help-top-actions">
         <button type="button" id="backToRecord" class="btn primary">返回录音页面</button>
@@ -22,45 +22,98 @@
     <div class="help-layout">
       <nav class="help-toc" aria-label="目录">
         <h2>目录</h2>
-        <a href="#quickstart">1. 快速开始</a>
-        <a href="#devices">2. 如何选择声音设备</a>
-        <a href="#voicemeeter">3. VoiceMeeter使用方法</a>
-        <a href="#waveform">4. 音浪怎么看</a>
-        <a href="#recording">5. 开始和停止录音</a>
-        <a href="#bitrate">6. 比特率怎么选择</a>
-        <a href="#storage">7. 录音保存位置</a>
-        <a href="#history">8. 录音历史</a>
-        <a href="#recovery">9. 崩溃或停电</a>
-        <a href="#faq">10. 常见问题</a>
-        <a href="#privacy">11. 隐私说明</a>
+        <a href="#overview">1. 界面导览</a>
+        <a href="#quickstart">2. 快速开始（3 步）</a>
+        <a href="#device-verify">3. 设备核对</a>
+        <a href="#devices">4. 如何选择声音设备</a>
+        <a href="#voicemeeter">5. VoiceMeeter 使用方法</a>
+        <a href="#local-media">6. 插件内播放本地媒体</a>
+        <a href="#auto-start">7. 自动开始录音</a>
+        <a href="#waveform">8. 音浪怎么看</a>
+        <a href="#recording">9. 开始和停止录音</a>
+        <a href="#bitrate">10. 比特率怎么选择</a>
+        <a href="#storage">11. 录音保存位置</a>
+        <a href="#history">12. 录音历史</a>
+        <a href="#recovery">13. 崩溃或停电</a>
+        <a href="#faq">14. 常见问题</a>
+        <a href="#privacy">15. 隐私说明</a>
       </nav>
 
       <main class="help-main">
+        <section class="help-card" id="overview">
+          <h2>控制面板长什么样？</h2>
+          <p class="help-lead">第一次打开插件时，你会看到下面这几个主要区域。按从上到下的顺序操作即可。</p>
+          <figure class="help-figure">
+            <img data-help-src="help/img-dashboard.svg" alt="控制面板示意：声音设备、设备核对、本地媒体播放、音浪监测、开始与停止录音按钮" width="760" height="420" loading="lazy">
+            <figcaption>图 1：控制面板主要区域一览</figcaption>
+          </figure>
+          <ol>
+            <li><strong>声音设备</strong>：选择要录制的输入设备（例如 VoiceMeeter Out B1）。</li>
+            <li><strong>设备核对</strong>：对比「插件选择」与「浏览器默认输入」是否一致。</li>
+            <li><strong>本地媒体播放</strong>：在插件内直接播放 mp4/mp3，播完后可自动开始录音。</li>
+            <li><strong>音浪监测</strong>：确认设备里真的有声音。</li>
+            <li><strong>开始 / 停止录音</strong>：正式录音按钮。</li>
+          </ol>
+          <div class="callout ok">
+            右上角 <strong>？ 使用说明</strong> 可随时回到本页；<strong>⚙ 设置</strong> 可调整自动录音、下载方式等。
+          </div>
+        </section>
+
         <section class="help-card" id="quickstart">
-          <h2>3步开始录音</h2>
-          <div class="steps">
-            <article class="step">
+          <h2>3 步开始录音</h2>
+          <div class="help-visual-steps">
+            <article class="help-visual-step">
               <span class="num">1</span>
-              <strong>选择声音设备</strong>
-              <p>选择要录制的设备，例如 VoiceMeeter Out B1、CABLE Output、Stereo Mix 或麦克风。</p>
+              <div>
+                <strong>选择声音设备</strong>
+                <p>在下拉框中选择 VoiceMeeter Out B1、CABLE Output、Stereo Mix 或你的麦克风。</p>
+                <p>若列表为空，点击「授权设备」并允许浏览器访问麦克风。</p>
+              </div>
             </article>
-            <article class="step">
+            <article class="help-visual-step">
               <span class="num">2</span>
-              <strong>确认音浪有变化</strong>
-              <p>播放一段声音。如果音浪开始跳动，说明插件已经收到该设备里的声音。</p>
+              <div>
+                <strong>确认音浪有变化</strong>
+                <p>播放一段测试声音。音浪开始跳动，说明插件已经收到该设备里的声音。</p>
+                <img data-help-src="help/img-waveform.svg" alt="音浪监测示意：检测到声音，波形条在跳动" width="640" height="180" loading="lazy">
+              </div>
             </article>
-            <article class="step">
+            <article class="help-visual-step">
               <span class="num">3</span>
-              <strong>开始录音</strong>
-              <p>点击开始录音。过程中会持续自动保存，停止后生成 MP3。</p>
+              <div>
+                <strong>开始录音</strong>
+                <p>可选填写录音名称，选择比特率（重要通话推荐 64 kbps），点击「开始录音」。</p>
+                <p>停止后会自动保存，并按设置下载原始录音 / 生成 MP3。</p>
+              </div>
             </article>
           </div>
           <button type="button" class="btn primary" id="quickStartBack">返回录音页面开始使用</button>
         </section>
 
+        <section class="help-card" id="device-verify">
+          <h2>设备核对是做什么的？</h2>
+          <p>插件录的是你在下拉框里选的设备；浏览器系统默认麦克风可能是另一个。若两者不一致，容易出现「以为在录 A，实际录的是 B」。</p>
+          <div class="help-guide">
+            <figure class="help-figure">
+              <img data-help-src="help/img-device-verify.svg" alt="设备核对卡片示意：插件选择与浏览器默认输入一致，显示绿色提示" width="640" height="260" loading="lazy">
+              <figcaption>图 2：设备核对显示「一致」</figcaption>
+            </figure>
+            <div class="help-guide-text">
+              <h3>怎么看结果？</h3>
+              <ul>
+                <li><span class="help-badge">绿色 · 一致</span>插件选择与浏览器默认输入相同，可以开始录音。</li>
+                <li><span class="help-badge" style="background:#fffbeb;color:#a16207;border-color:#fde68a">黄色</span>名称相近但 ID 不同，建议点「重新核对」或统一浏览器默认麦克风。</li>
+                <li><span class="help-badge" style="background:#fef2f2;color:#b91c1c;border-color:#fecaca">红色</span>完全不一致，请改插件选择或 Windows / 浏览器默认输入。</li>
+              </ul>
+              <p>播放测试音后，「立体声」一行还会检测左右声道是否都有信号（需 2 声道设备）。</p>
+            </div>
+          </div>
+          <div class="callout ok">新手建议：每次换设备后点一次「重新核对」，看到绿色再录音。</div>
+        </section>
+
         <section class="help-card" id="devices">
           <h2>声音设备应该选哪个？</h2>
-          <p>SafeCallRecorder 录制的是浏览器能访问的录音输入设备。</p>
+          <p>SafeCallRecorder 录制的是浏览器能访问的<strong>录音输入设备</strong>。</p>
           <p><strong>选择哪个设备，插件就录制哪个设备里的声音。</strong></p>
           <h3>常见可选设备</h3>
           <ul>
@@ -92,10 +145,9 @@
             <li>打开 VoiceMeeter。</li>
             <li>确认浏览器或目标软件的声音进入 VoiceMeeter。</li>
             <li>在对应通道开启 B1、B2 或 B3。</li>
-            <li>打开 SafeCallRecorder。</li>
-            <li>选择对应的 VoiceMeeter Out 设备。</li>
-            <li>播放声音并观察音浪。</li>
-            <li>音浪有变化后开始录音。</li>
+            <li>打开 SafeCallRecorder，选择对应的 VoiceMeeter Out 设备。</li>
+            <li>在「设备核对」中确认绿色「一致」。</li>
+            <li>播放声音并观察音浪，然后开始录音。</li>
           </ol>
           <div class="flow">
             <span>浏览器声音</span><span class="arrow">→</span>
@@ -117,9 +169,72 @@
           </div>
         </section>
 
+        <section class="help-card" id="local-media">
+          <h2>如何在插件内播放本地视频 / 音频？</h2>
+          <p class="help-lead">不用另开浏览器标签页，直接在控制面板选文件、播放；<strong>播完后</strong>自动开始录音（需在设置中开启）。</p>
+          <div class="help-guide">
+            <figure class="help-figure">
+              <img data-help-src="help/img-local-media.svg" alt="本地媒体播放区域示意：选择文件、播放按钮、视频播放器与播完提示" width="640" height="300" loading="lazy">
+              <figcaption>图 3：本地媒体播放区域</figcaption>
+            </figure>
+            <div class="help-guide-text">
+              <h3>操作步骤</h3>
+              <ol>
+                <li>在「本地媒体播放」区域点击 <strong>选择本地文件</strong>，选 mp4、webm、mp3、wav 等。</li>
+                <li>点击 <strong>播放</strong>。播放过程中会提示「结束后将自动开始录音」。</li>
+                <li>文件播完后，插件自动填入录音名称并开始录音。</li>
+                <li>需要停止播放时点「停止」，不会触发自动录音。</li>
+              </ol>
+              <div class="callout warn">
+                插件录的是<strong>所选声音设备</strong>里的声音，不是直接从视频文件提取音轨。请把播放器声音路由到 VoiceMeeter Out B1 等设备（与手动录音相同）。
+              </div>
+            </div>
+          </div>
+          <h3>典型场景</h3>
+          <p>先播放一段本地提示音 / 开场视频，播完后立刻录接下来的通话或会议——无需手动点「开始录音」。</p>
+        </section>
+
+        <section class="help-card" id="auto-start">
+          <h2>自动开始录音怎么设置？</h2>
+          <p>点击右上角 <strong>⚙ 设置</strong>，找到以下选项（需先开启总开关「检测到声音后自动开始录音」）：</p>
+          <figure class="help-figure">
+            <img data-help-src="help/img-auto-start.svg" alt="设置中的自动录音选项：声音检测、标签页播放、插件内播完后再开始" width="640" height="320" loading="lazy">
+            <figcaption>图 4：自动录音相关设置</figcaption>
+          </figure>
+          <table style="width:100%;border-collapse:collapse;font-size:14px;margin:12px 0">
+            <thead>
+              <tr style="background:#f8fafc">
+                <th style="text-align:left;padding:8px;border:1px solid #e2e8f0">选项</th>
+                <th style="text-align:left;padding:8px;border:1px solid #e2e8f0">何时开始录音</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding:8px;border:1px solid #e2e8f0">检测到声音后自动开始</td>
+                <td style="padding:8px;border:1px solid #e2e8f0">总开关；控制面板开着时，音浪首次检测到声音</td>
+              </tr>
+              <tr>
+                <td style="padding:8px;border:1px solid #e2e8f0">浏览器标签页播放本地媒体时自动开始</td>
+                <td style="padding:8px;border:1px solid #e2e8f0">在浏览器新标签里打开 mp4/mp3 并开始播放时<strong>立即</strong>录音</td>
+              </tr>
+              <tr>
+                <td style="padding:8px;border:1px solid #e2e8f0"><strong>插件内播放结束后自动开始</strong></td>
+                <td style="padding:8px;border:1px solid #e2e8f0">在控制面板播放器里<strong>播完后</strong>再录音（播放中不会提前开始）</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="callout ok">
+            <strong>新手推荐组合</strong>：开启「检测到声音后自动开始」+「插件内播放结束后自动开始」。先播本地媒体，播完再录通话。
+          </div>
+        </section>
+
         <section class="help-card" id="waveform">
           <h2>如何确认设备里有声音？</h2>
           <p>音浪来自真实声音数据，不是装饰动画。</p>
+          <figure class="help-figure">
+            <img data-help-src="help/img-waveform.svg" alt="音浪显示检测到声音，波形条在跳动" width="640" height="180" loading="lazy">
+            <figcaption>图 5：音浪监测示例</figcaption>
+          </figure>
           <h3>检测到声音</h3>
           <p>设备中有声音，可以开始录音。</p>
           <h3>声音较小</h3>
@@ -137,14 +252,13 @@
           <h2>如何录音？</h2>
           <ol>
             <li>可选填写录音名称。</li>
-            <li>选择声音设备。</li>
-            <li>确认音浪有变化。</li>
-            <li>选择比特率。</li>
-            <li>点击开始录音。</li>
+            <li>选择声音设备，并在「设备核对」中确认一致。</li>
+            <li>确认音浪有变化（或先完成本地媒体播放）。</li>
+            <li>选择比特率（见下一节）。</li>
+            <li>点击开始录音，或等待自动开始。</li>
             <li>观察当前录音时长和已安全保存时长。</li>
             <li>结束后点击停止录音。</li>
-            <li>等待 MP3 生成。</li>
-            <li>MP3 会根据设置自动下载或保存。</li>
+            <li>原始录音会按设置立即下载；MP3 在后台生成。</li>
             <li>录音仍保留在历史记录中。</li>
           </ol>
           <div class="callout warn">
@@ -155,6 +269,7 @@
 
         <section class="help-card" id="bitrate">
           <h2>应该选择多少 kbps？</h2>
+          <p class="help-lead">控制面板提供 11 档比特率，在文件大小与清晰度之间更细地选择。</p>
           <div class="bitrate-grid">
             <article class="bitrate-item">
               <strong>16 kbps · 最小文件</strong>
@@ -166,6 +281,13 @@
               </ul>
             </article>
             <article class="bitrate-item">
+              <strong>24 kbps · 超省空间</strong>
+              <ul>
+                <li>比 16 kbps 略清楚，文件仍很小</li>
+                <li>约 10.8 MB/小时</li>
+              </ul>
+            </article>
+            <article class="bitrate-item">
               <strong>32 kbps · 节省空间</strong>
               <ul>
                 <li>普通讲话基本能听清</li>
@@ -174,11 +296,25 @@
               </ul>
             </article>
             <article class="bitrate-item">
+              <strong>40 kbps · 紧凑清晰</strong>
+              <ul>
+                <li>比 32 kbps 更清楚，文件仍紧凑</li>
+                <li>约 18 MB/小时</li>
+              </ul>
+            </article>
+            <article class="bitrate-item">
               <strong>48 kbps · 日常通话</strong>
               <ul>
                 <li>语音与文件大小较平衡</li>
                 <li>适合普通通话</li>
                 <li>约 21.6 MB/小时</li>
+              </ul>
+            </article>
+            <article class="bitrate-item">
+              <strong>56 kbps · 清晰通话</strong>
+              <ul>
+                <li>比 48 kbps 人声更饱满</li>
+                <li>约 25.2 MB/小时</li>
               </ul>
             </article>
             <article class="bitrate-item recommend">
@@ -191,11 +327,25 @@
               </ul>
             </article>
             <article class="bitrate-item">
+              <strong>80 kbps · 高清晰</strong>
+              <ul>
+                <li>重要通话与高质量之间的折中</li>
+                <li>约 36 MB/小时</li>
+              </ul>
+            </article>
+            <article class="bitrate-item">
               <strong>96 kbps · 高质量</strong>
               <ul>
                 <li>保留更多声音细节</li>
                 <li>适合复杂背景声音</li>
                 <li>约 43.2 MB/小时</li>
+              </ul>
+            </article>
+            <article class="bitrate-item">
+              <strong>112 kbps · 近立体声</strong>
+              <ul>
+                <li>接近最高立体声档，文件略小</li>
+                <li>约 50.4 MB/小时</li>
               </ul>
             </article>
             <article class="bitrate-item">
@@ -207,7 +357,7 @@
               </ul>
             </article>
           </div>
-          <div class="callout ok">普通重要通话建议选择 64 kbps。</div>
+          <div class="callout ok">普通重要通话建议选择 64 kbps；需要更细可在 48–80 kbps 之间试选。</div>
         </section>
 
         <section class="help-card" id="storage">
@@ -255,6 +405,18 @@
           <details>
             <summary>为什么声音设备列表是空的？</summary>
             <p>点击设备区域的授权按钮，允许浏览器访问麦克风或声音设备；确认 Windows 中设备已启用；刷新设备列表；必要时重新加载插件。</p>
+          </details>
+          <details>
+            <summary>设备核对显示红色「不一致」怎么办？</summary>
+            <p>把插件下拉框和 Windows / 浏览器默认麦克风改成同一个设备（例如都选 VoiceMeeter Out B1），然后点「重新核对」直到变绿。</p>
+          </details>
+          <details>
+            <summary>本地媒体播完了为什么没有自动录音？</summary>
+            <p>请在 ⚙ 设置中开启「检测到声音后自动开始录音」和「插件内播放结束后自动开始」；确认已选择声音设备；确认播放到自然结束（手动停止不会触发）。</p>
+          </details>
+          <details>
+            <summary>播放本地视频时会不会提前开始录音？</summary>
+            <p>使用插件内播放器时，播放过程中<strong>不会</strong>因音浪检测提前录音，只有播完后才会自动开始（若已开启对应设置）。</p>
           </details>
           <details>
             <summary>为什么 VoiceMeeter 设备没有显示？</summary>
@@ -307,7 +469,7 @@
           </div>
         </section>
 
-        <p class="help-footer" id="helpVersion">使用说明版本：1.0</p>
+        <p class="help-footer" id="helpVersion">使用说明版本：1.1.1</p>
       </main>
     </div>
   </div>
