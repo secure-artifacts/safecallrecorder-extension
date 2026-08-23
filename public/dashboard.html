@@ -70,9 +70,39 @@
     </div>
 
     <section class="card">
-      <label>录音名称（可选）
-        <input id="recName" type="text" maxlength="80" placeholder="例如：VK通话、会议记录" autocomplete="off">
-      </label>
+      <div class="rec-name-builder">
+        <div class="rec-name-summary">
+          <div class="rec-name-summary-main">
+            <span class="rec-name-preview-label">录音名称</span>
+            <strong id="recNamePreview" class="rec-name-preview">—</strong>
+          </div>
+          <button type="button" id="recNameEditToggle" class="btn outline small" aria-expanded="false" aria-controls="recNameEditor">修改</button>
+        </div>
+        <div id="recNameEditor" class="rec-name-editor hidden">
+          <div class="rec-name-parts-row">
+            <div id="recNameToggles" class="rec-name-toggles" role="group" aria-label="已加入的名称组成"></div>
+            <div class="rec-name-add-wrap">
+              <button type="button" id="recNameAddBtn" class="btn outline small">添加</button>
+              <div id="recNameAddMenu" class="rec-name-add-menu hidden" role="menu">
+                <button type="button" role="menuitem" data-add="date">日期</button>
+                <button type="button" role="menuitem" data-add="number">编号</button>
+                <button type="button" role="menuitem" data-add="custom">自定义</button>
+                <button type="button" role="menuitem" data-add="space">空格</button>
+              </div>
+            </div>
+          </div>
+          <p class="hint rec-name-order-hint">各段直接相连，不会自动加横线。需要间隔时添加空格。点 × 去掉；拖动 ⠿ 调整顺序。<button type="button" id="helpNameLink" class="linkish inline">查看说明</button></p>
+          <div id="recNameDateRow" class="rec-name-extra hidden">
+            <span class="rec-name-date-label">日期格式</span>
+            <div class="rec-name-date-styles" role="group" aria-label="日期格式">
+              <button type="button" id="recNameDateMd" class="btn outline small rec-name-toggle" aria-pressed="false">月日 0823</button>
+              <button type="button" id="recNameDateYmd" class="btn outline small rec-name-toggle" aria-pressed="false">年月日 20260823</button>
+            </div>
+            <p class="hint">中间不加横杠，只保留数字。可选择带年份或不带年份。</p>
+          </div>
+          <div id="recNameItemFields" class="rec-name-item-fields"></div>
+        </div>
+      </div>
 
       <div class="device-row">
         <label class="grow">声音设备

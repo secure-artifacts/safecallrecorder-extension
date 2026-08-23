@@ -63,6 +63,22 @@ describe("history UI sync after delete/clear", () => {
     expect(reconcile).toContain('some((s) => s.id === session.id)');
   });
 
+  it("lets saved recordings export MP3 at a chosen bitrate", () => {
+    expect(dashboard).toContain("history-export-bitrate");
+    expect(dashboard).toContain("导出MP3");
+    expect(dashboard).toContain("overrideBitrate: target");
+    expect(dashboard).toContain("BITRATE_PRESETS");
+  });
+
+  it("keeps the export-bitrate select open across history polls", () => {
+    expect(dashboard).toContain("exportBitrateChoice");
+    expect(dashboard).toContain("isHistoryExportSelectOpen");
+    expect(dashboard).toContain("lastHistoryListKey");
+    expect(dashboard).toContain("holdHistoryExportUi");
+    expect(dashboard).toContain("if (!force && isHistoryExportSelectOpen()) return");
+    expect(dashboard).toContain("if (!force && nextKey === lastHistoryListKey && host.childElementCount > 0) return");
+  });
+
   it("delete and UI share sessionId field", () => {
     expect(deletion).toContain("sessionId: string");
     expect(dashboard).toContain("uiSessionId");

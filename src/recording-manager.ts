@@ -49,12 +49,13 @@ export class RecordingManager {
     const mode: SourceMode = "device";
     if (!input.deviceId) throw new Error("请选择声音设备");
 
-    const displayName = (input.displayName || "").trim();
+    const displayName = input.displayName ?? "";
     const targetBitrate = resolveBitrate(input.bitrate);
+    const title = displayName !== "" ? displayName : "未命名录音";
     const session: Session = {
       id: input.sessionId || id(),
-      name: displayName || `录音 ${new Date().toLocaleString()}`,
-      displayName: displayName || undefined,
+      name: title,
+      displayName: displayName !== "" ? displayName : undefined,
       mode,
       status: "starting",
       recordingStatus: "starting",

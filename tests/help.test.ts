@@ -16,6 +16,7 @@ describe("help system", () => {
     expect(html).toContain('id="showOnboardingAgain"');
     expect(html).toContain('id="helpDevicesLink"');
     expect(html).toContain('id="helpBitrateLink"');
+    expect(html).toContain('id="helpNameLink"');
     expect(html.indexOf('id="helpBtn"')).toBeLessThan(html.indexOf('id="settingsBtn"'));
   });
 
@@ -31,6 +32,7 @@ describe("help system", () => {
       "auto-start",
       "waveform",
       "recording",
+      "name",
       "bitrate",
       "storage",
       "history",
@@ -51,6 +53,10 @@ describe("help system", () => {
     expect(html).toContain("本地保存，不会上传");
     expect(html).toContain("64 kbps");
     expect(html).toContain("已安全保存");
+    expect(html).toContain("录音名称怎么拼");
+    expect(html).toContain("不会自动加横线");
+    expect(html).toContain("按任意音质重新导出");
+    expect(html).toContain("导出MP3");
     expect(html).toContain("help.css");
     expect(html).not.toContain("http://");
     expect(html).not.toContain("https://cdn");
@@ -80,7 +86,7 @@ describe("help system", () => {
   });
 
   it("exports help content version", () => {
-    expect(HELP_CONTENT_VERSION).toBe("1.1.1");
+    expect(HELP_CONTENT_VERSION).toBe("1.2.0");
   });
 
   it("manifest does not add network host permissions for help", () => {

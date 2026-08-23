@@ -517,9 +517,38 @@ input[type="text"]:focus, select:focus {
   font-weight: 600;
 }
 .history-help { margin: 0 0 10px; font-size: 12px; color: #64748b; line-height: 1.45; }
-.history-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.history-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .history-actions .btn.small.download { background: #1769aa; color: #fff; }
 .history-actions .btn.small.play { background: #fff; border: 1px solid var(--line); }
+.history-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 2px;
+}
+.history-export-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+.history-export-bitrate {
+  min-width: 180px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  font: inherit;
+  font-size: 13px;
+}
+.history-export-size {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
 .history-item.deleting {
   opacity: 0.55;
   pointer-events: none;
@@ -575,6 +604,180 @@ input[type="text"]:focus, select:focus {
   gap: 12px; margin-bottom: 10px; font-weight: 600;
 }
 .settings select { width: auto; min-width: 160px; margin: 0; }
+
+.rec-name-builder {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.rec-name-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.rec-name-summary-main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.rec-name-preview-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.rec-name-preview {
+  font-size: 16px;
+  word-break: break-all;
+}
+.rec-name-preview.rec-name-preview-empty {
+  color: var(--muted);
+}
+.rec-name-editor {
+  display: grid;
+  gap: 10px;
+}
+.rec-name-parts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+.rec-name-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+}
+.rec-name-chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid #99f6e4;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--accent-soft);
+}
+.rec-name-chip.dragging {
+  opacity: 0.55;
+}
+.rec-name-chip.drag-over {
+  box-shadow: 0 0 0 2px #5eead4;
+}
+.rec-name-chip-space {
+  border-style: dashed;
+}
+.rec-name-chip-space .rec-name-chip-label::after {
+  content: "␣";
+  margin-left: 4px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+.rec-name-grip {
+  border: 0;
+  background: #99f6e4;
+  color: #115e59;
+  padding: 0 8px;
+  cursor: grab;
+  font-size: 14px;
+  line-height: 1;
+}
+.rec-name-grip:active {
+  cursor: grabbing;
+}
+.rec-name-chip-label {
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #115e59;
+  display: flex;
+  align-items: center;
+}
+.rec-name-remove {
+  border: 0;
+  background: transparent;
+  color: #0f766e;
+  padding: 0 10px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+.rec-name-remove:hover {
+  background: #5eead4;
+  color: #134e4a;
+}
+.rec-name-add-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.rec-name-add-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 8;
+  min-width: 132px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px #0f172a18;
+  padding: 4px;
+  display: grid;
+}
+.rec-name-add-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  color: #334155;
+}
+.rec-name-add-menu button:hover {
+  background: #f1f5f9;
+}
+.rec-name-order-hint {
+  margin: -2px 0 0;
+}
+.rec-name-toggle.active {
+  background: var(--accent-soft);
+  border-color: #5eead4;
+  color: #115e59;
+  font-weight: 700;
+}
+.rec-name-extra label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.rec-name-extra input[type="number"],
+.rec-name-extra input[type="text"] {
+  width: 100%;
+  margin: 0;
+}
+.rec-name-date-label {
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.rec-name-date-styles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rec-name-item-fields {
+  display: grid;
+  gap: 10px;
+}
 
 @media (max-width: 560px) {
   .main-actions, .timers { grid-template-columns: 1fr; }

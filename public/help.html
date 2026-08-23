@@ -11,7 +11,7 @@
     <header class="help-top">
       <div class="help-brand">
         <h1>SafeCallRecorder 使用说明</h1>
-        <p>图文新手教程：选设备 → 核对 → 播放本地媒体（可选）→ 开始录音。</p>
+        <p>图文新手教程：选设备 → 核对 → 起名 → 开始录音 → 下载与导出。</p>
       </div>
       <div class="help-top-actions">
         <button type="button" id="backToRecord" class="btn primary">返回录音页面</button>
@@ -31,12 +31,13 @@
         <a href="#auto-start">7. 自动开始录音</a>
         <a href="#waveform">8. 音浪怎么看</a>
         <a href="#recording">9. 开始和停止录音</a>
-        <a href="#bitrate">10. 比特率怎么选择</a>
-        <a href="#storage">11. 录音保存位置</a>
-        <a href="#history">12. 录音历史</a>
-        <a href="#recovery">13. 崩溃或停电</a>
-        <a href="#faq">14. 常见问题</a>
-        <a href="#privacy">15. 隐私说明</a>
+        <a href="#name">10. 录音名称</a>
+        <a href="#bitrate">11. 比特率怎么选择</a>
+        <a href="#storage">12. 录音保存位置</a>
+        <a href="#history">13. 录音历史</a>
+        <a href="#recovery">14. 崩溃或停电</a>
+        <a href="#faq">15. 常见问题</a>
+        <a href="#privacy">16. 隐私说明</a>
       </nav>
 
       <main class="help-main">
@@ -48,9 +49,10 @@
             <figcaption>图 1：控制面板主要区域一览</figcaption>
           </figure>
           <ol>
+            <li><strong>录音名称</strong>：用日期、自定义文字、编号、空格拼出文件名。</li>
             <li><strong>声音设备</strong>：选择要录制的输入设备（例如 VoiceMeeter Out B1）。</li>
             <li><strong>设备核对</strong>：对比「插件选择」与「浏览器默认输入」是否一致。</li>
-            <li><strong>本地媒体播放</strong>：在插件内直接播放 mp4/mp3，播完后可自动开始录音。</li>
+            <li><strong>本地媒体播放</strong>：在插件内直接播放 mp4/mp3/webm，播完后可自动开始录音。</li>
             <li><strong>音浪监测</strong>：确认设备里真的有声音。</li>
             <li><strong>开始 / 停止录音</strong>：正式录音按钮。</li>
           </ol>
@@ -82,8 +84,8 @@
               <span class="num">3</span>
               <div>
                 <strong>开始录音</strong>
-                <p>可选填写录音名称，选择比特率（重要通话推荐 64 kbps），点击「开始录音」。</p>
-                <p>停止后会自动保存，并按设置下载原始录音 / 生成 MP3。</p>
+                <p>点「修改」拼好录音名称，选择比特率（重要通话推荐 64 kbps），点击「开始录音」。</p>
+                <p>停止后会自动保存，并按设置下载原始录音、在后台生成 MP3。</p>
               </div>
             </article>
           </div>
@@ -181,7 +183,7 @@
               <h3>操作步骤</h3>
               <ol>
                 <li>在「本地媒体播放」区域点击 <strong>选择本地文件</strong>，选 mp4、webm、mp3、wav 等。</li>
-                <li>点击 <strong>播放</strong>。播放过程中会提示「结束后将自动开始录音」。</li>
+                <li>点击 <strong>播放</strong>。进度条会显示当前时间和总时长（本插件导出的原始 WebM 也会补上时长）。</li>
                 <li>文件播完后，插件自动填入录音名称并开始录音。</li>
                 <li>需要停止播放时点「停止」，不会触发自动录音。</li>
               </ol>
@@ -251,19 +253,56 @@
         <section class="help-card" id="recording">
           <h2>如何录音？</h2>
           <ol>
-            <li>可选填写录音名称。</li>
+            <li>拼好录音名称（见下一节）。</li>
             <li>选择声音设备，并在「设备核对」中确认一致。</li>
             <li>确认音浪有变化（或先完成本地媒体播放）。</li>
-            <li>选择比特率（见下一节）。</li>
+            <li>选择比特率（见「比特率怎么选择」）。</li>
             <li>点击开始录音，或等待自动开始。</li>
             <li>观察当前录音时长和已安全保存时长。</li>
             <li>结束后点击停止录音。</li>
-            <li>原始录音会按设置立即下载；MP3 在后台生成。</li>
-            <li>录音仍保留在历史记录中。</li>
+            <li>原始录音会按设置立即下载；MP3 在后台分段生成，长录音也可以转。</li>
+            <li>录音仍保留在历史记录中，可再改音质导出。</li>
           </ol>
+          <h3>停止后怎么下载？</h3>
+          <p>在右上角 <strong>⚙ 设置</strong> 里选择「停止录音后的下载方式」：</p>
+          <ul>
+            <li><strong>立即下载原始录音，并在后台生成 MP3（推荐）</strong>：马上拿到可播放的原始文件，MP3 稍后再自动下载。</li>
+            <li><strong>只下载原始录音</strong>：最快，不转 MP3。</li>
+            <li><strong>只等 MP3</strong>：等待时间较长，一般不推荐。</li>
+          </ul>
           <div class="callout warn">
             <p><strong>当前录音时长</strong>：已经录了多久。</p>
             <p><strong>已安全保存时长</strong>：已经成功写入本地存储的长度。只有这部分，才能在浏览器异常关闭或电脑停电后恢复。</p>
+          </div>
+        </section>
+
+        <section class="help-card" id="name">
+          <h2>录音名称怎么拼？</h2>
+          <p class="help-lead">名称默认收起，只显示最终结果。点 <strong>修改</strong> 后再添加、去掉或调整各段顺序。</p>
+          <h3>可以添加的部分</h3>
+          <ul>
+            <li><strong>日期</strong>：默认月日，例如 <code>0823</code>。也可改成年月日，例如 <code>20260823</code>。中间不加横杠。</li>
+            <li><strong>自定义</strong>：你输入的文字会原样出现在名称里，可添加多段。</li>
+            <li><strong>编号</strong>：今天用你设的起始数字，到了明天自动加 1。也可添加多段。</li>
+            <li><strong>空格</strong>：在两段之间插入一个空格。需要几个就加几个。</li>
+          </ul>
+          <h3>各段怎么连在一起？</h3>
+          <p>日期、自定义、编号之间<strong>不会自动加横线</strong>，直接相连。需要间隔时，自己添加「空格」。</p>
+          <ul>
+            <li>日期 + 自定义 → <code>0823VK</code></li>
+            <li>日期 + 空格 + 自定义 → <code>0823 VK</code></li>
+            <li>日期 + 空格 + 自定义 + 空格 + 编号 → <code>0823 VK 3</code></li>
+          </ul>
+          <h3>怎么调整？</h3>
+          <ol>
+            <li>点名称旁边的 <strong>修改</strong>。</li>
+            <li>点 <strong>添加</strong>，选择日期 / 编号 / 自定义 / 空格。</li>
+            <li>点 <strong>×</strong> 去掉某一段。</li>
+            <li>按住 <strong>⠿</strong> 拖动，调整先后顺序。</li>
+            <li>有日期时，可在「月日」和「年月日」之间切换。</li>
+          </ol>
+          <div class="callout ok">
+            预览里看到的名称，就是停止后下载文件使用的名字（Windows 不允许的符号会在保存文件时去掉）。
           </div>
         </section>
 
@@ -377,7 +416,18 @@
         <section class="help-card" id="history">
           <h2>如何查看以前的录音？</h2>
           <p>完成和异常中断的录音都会出现在“录音历史”中。</p>
-          <p>每条记录可以：播放、下载 MP3、重新生成 MP3、下载原始录音、删除。</p>
+          <p>每条记录可以：播放 MP3、下载当前 MP3、<strong>按任意音质重新导出 MP3</strong>、下载原始录音、删除。</p>
+          <h3>按音质重新导出</h3>
+          <ol>
+            <li>在该条记录里打开「导出音质」，选择 16–128 kbps。</li>
+            <li>旁边会估算导出后的大约体积。</li>
+            <li>点「导出MP3」。原始录音仍保留，不会被覆盖。</li>
+          </ol>
+          <p>选的音质和当初录音相同时，会直接下载已有 MP3；不同时会从原始录音重新编码。</p>
+          <h3>原始录音能显示总时长吗？</h3>
+          <p>可以。下载时的原始 WebM 会写入总时长和定位信息，用播放器打开应能看到进度条和一共多长。以前下过的旧文件可以重新下载，或放到「本地媒体播放」里打开（加载时会补上时长）。</p>
+          <h3>长录音转 MP3 失败怎么办？</h3>
+          <p>现在会按大约 1 分钟一段解码再编码，不再要求整段一次性转换。若仍失败，原始录音还在，可点「导出MP3」重试，或先下载原始文件。</p>
           <p>录音历史默认一直保留。只有你手动删除，或点击“清空历史”并完成两次确认后才会永久删除。</p>
           <div class="callout danger">
             删除录音后无法恢复。清空历史需要二次确认。
@@ -431,8 +481,20 @@
             <p>设备音量可能偏低。可以提高 VoiceMeeter 通道音量，但不要过大以免失真。</p>
           </details>
           <details>
+            <summary>录音名称中间为什么没有横线？</summary>
+            <p>各段默认直接相连，例如 <code>0823VK</code>。需要空格时，点「修改」→「添加」→「空格」，再拖到两段中间。</p>
+          </details>
+          <details>
+            <summary>编号第二天会变吗？</summary>
+            <p>会。编号使用你设的起始数字，每过一个自然日自动加 1。同一天多次录音，编号保持当天这个数字，除非你再改起始编号。</p>
+          </details>
+          <details>
             <summary>为什么停止后 MP3 生成失败？</summary>
-            <p>原始录音通常仍然安全保留。可在录音历史中点击重新生成 MP3，或下载原始录音。</p>
+            <p>原始录音通常仍然安全保留。可在录音历史中选择任意音质后点击「导出MP3」，或下载原始录音。长录音会分段转换，一般不必整段一次性完成。</p>
+          </details>
+          <details>
+            <summary>原始 WebM 没有进度条、看不到总时长？</summary>
+            <p>请重新加载插件后再点一次「下载原始录音」。新文件会带上总时长。旧文件可重新下载，或用插件内「本地媒体播放」打开。</p>
           </details>
           <details>
             <summary>为什么下载 MP3 没有反应？</summary>
@@ -469,7 +531,7 @@
           </div>
         </section>
 
-        <p class="help-footer" id="helpVersion">使用说明版本：1.1.1</p>
+        <p class="help-footer" id="helpVersion">使用说明版本：1.2.0</p>
       </main>
     </div>
   </div>

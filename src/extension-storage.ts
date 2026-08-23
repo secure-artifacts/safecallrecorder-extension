@@ -1,4 +1,5 @@
 import { MessageType, requestId, type Request } from "./messages";
+import { normalizeRecordingNameConfig } from "./recording-name";
 import { DEFAULT_SETTINGS, type AppSettings } from "./types";
 
 export type StorageErrorCode =
@@ -189,7 +190,12 @@ export async function storageRemove(keys: string | string[]) {
 export async function getSettings(): Promise<AppSettings> {
   try {
     const data = (await storageGet("settings")) as { settings?: AppSettings };
-    return { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+    const raw = (data.settings || {}) as AppSettings;
+    return {
+      ...DEFAULT_SETTINGS,
+      ...raw,
+      recordingName: normalizeRecordingNameConfig(raw.recordingName)
+    };
   } catch (e) {
     logStorageIssue("getSettings", e);
     return { ...DEFAULT_SETTINGS };

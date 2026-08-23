@@ -1,3 +1,5 @@
+import type { RecordingNameConfig } from "./recording-name";
+
 export type SourceMode = "tab" | "device" | "both";
 
 /** Active capture / finalize lifecycle (independent of MP3). */
@@ -150,6 +152,8 @@ export interface AppSettings {
   autoStartOnLocalMediaTab?: boolean;
   /** Auto start when in-dashboard local media player reaches end. */
   autoStartOnLocalMediaEnded?: boolean;
+  /** Recording name builder (date / daily number / custom). */
+  recordingName?: Partial<RecordingNameConfig>;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

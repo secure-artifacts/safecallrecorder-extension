@@ -37,7 +37,7 @@ describe("mp3 download service", () => {
     if (!result.ok) expect(result.error.code).toBe("MP3_BLOB_NOT_FOUND");
   });
 
-  it("loads MP3 blob for completed session", async () => {
+  it("loads MP3 blob for completed session and patches seek metadata when missing", async () => {
     const sessionId = "s2";
     const blob = new Blob([new Uint8Array(256).fill(1)], { type: "audio/mpeg" });
     await storage.saveSession({
@@ -68,7 +68,7 @@ describe("mp3 download service", () => {
     const result = await getMp3BlobForSession(sessionId);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.size).toBe(256);
+      expect(result.size).toBeGreaterThan(blob.size);
       expect(result.filename).toBe("2026-07-18_23-28-05.mp3");
       expect(result.mimeType).toBe("audio/mpeg");
     }
@@ -167,8 +167,6 @@ describe("mp3 download service", () => {
 
   it("sanitizes download filenames", () => {
     expect(sanitizeFileBase('a<>:"/\\|?*.mp3')).not.toMatch(/[<>:"/\\|?*]/);
-    expect(buildMp3FileName("会议", new Date("2026-07-18T23:28:05").getTime())).toBe(
-      "会议_2026-07-18_23-28-05.mp3"
-    );
+    expect(buildMp3FileName("会议")).toBe("会议.mp3");
   });
 });

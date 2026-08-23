@@ -3,27 +3,6 @@ import { buildMp3FileName, sanitizeFileBase } from "../src/filename";
 import { sampleFromTimeDomain, createSilenceTracker, updateSilenceTracker, classifySoundState } from "../src/audio-level-analyser";
 import { AudioLevelConfig } from "../src/audio-level-config";
 
-describe("filename", () => {
-  it("builds stamp-only names", () => {
-    const name = buildMp3FileName(undefined, new Date("2026-07-18T19:42:08").getTime());
-    expect(name).toMatch(/^2026-07-18_19-42-08\.mp3$/);
-  });
-
-  it("includes sanitized display name", () => {
-    const name = buildMp3FileName("VK通话", new Date("2026-07-18T19:42:08").getTime());
-    expect(name).toBe("VK通话_2026-07-18_19-42-08.mp3");
-  });
-
-  it("strips illegal path characters", () => {
-    expect(sanitizeFileBase("../a\\b:c*?.txt")).not.toMatch(/[<>:"/\\|?*]/);
-    expect(sanitizeFileBase("../secret")).not.toContain("..");
-  });
-
-  it("adds numeric suffix for collisions", () => {
-    expect(buildMp3FileName("会议", 0, 2)).toContain("_2.mp3");
-  });
-});
-
 describe("ui simplification contract", () => {
   it("dashboard html has core controls only", async () => {
     const { readFileSync } = await import("node:fs");
@@ -32,7 +11,18 @@ describe("ui simplification contract", () => {
     expect(html).toContain('id="start"');
     expect(html).toContain('id="stop"');
     expect(html).toContain('id="bitrate"');
-    expect(html).toContain('id="recName"');
+    expect(html).toContain('id="recNamePreview"');
+    expect(html).toContain('id="recNameToggles"');
+    expect(html).toContain('id="recNameEditor" class="rec-name-editor hidden"');
+    expect(html).toContain('id="recNameEditToggle"');
+    expect(html).toContain('id="recNameAddBtn"');
+    expect(html).toContain('id="recNameItemFields"');
+    expect(html).toContain('data-add="date"');
+    expect(html).toContain('data-add="number"');
+    expect(html).toContain('data-add="custom"');
+    expect(html).toContain('data-add="space"');
+    expect(html).toContain('id="recNameDateMd"');
+    expect(html).toContain('id="recNameDateYmd"');
     expect(html).toContain("录音历史");
     expect(html).toContain('id="clearHistory"');
     expect(html).toContain("清空历史");

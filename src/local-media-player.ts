@@ -1,7 +1,7 @@
 import type { AppSettings } from "./types";
 
-const VIDEO_EXT = /\.(mp4|webm|mkv|mov|avi|wmv|m4v)(\?|#|$)/i;
-const AUDIO_EXT = /\.(mp3|wav|ogg|opus|m4a|aac|flac)(\?|#|$)/i;
+const VIDEO_EXT = /\.(mp4|mkv|mov|avi|wmv|m4v)(\?|#|$)/i;
+const AUDIO_EXT = /\.(mp3|wav|ogg|opus|m4a|aac|flac|webm)(\?|#|$)/i;
 
 export type LocalMediaKind = "video" | "audio";
 
@@ -10,8 +10,8 @@ export function detectLocalMediaKind(file: File): LocalMediaKind | null {
   if (file.type.startsWith("video/")) return "video";
   if (file.type.startsWith("audio/")) return "audio";
   const name = file.name.toLowerCase();
-  if (VIDEO_EXT.test(name)) return "video";
   if (AUDIO_EXT.test(name)) return "audio";
+  if (VIDEO_EXT.test(name)) return "video";
   return null;
 }
 

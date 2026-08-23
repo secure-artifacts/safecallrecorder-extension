@@ -1,4 +1,5 @@
 import { storage } from "../storage-manager";
+import { finalizeMp3Blob, mp3HasSeekMetadata } from "../mp3-metadata";
 import type { Mp3File, Session } from "../types";
 
 export type DownloadTrigger = "auto" | "manual" | "retry";
@@ -93,10 +94,24 @@ export async function getMp3BlobForSession(sessionId: string): Promise<Mp3BlobRe
       ? file.fileName || `${sessionId}.mp3`
       : `${file.fileName || sessionId}.mp3`;
 
+    let blob = file.blob;
+    const raw = new Uint8Array(await blob.arrayBuffer());
+    if (!mp3HasSeekMetadata(raw)) {
+      const durationMs =
+        session.durationMs ||
+        session.safeDurationMs ||
+        (session.endedAt && session.startedAt ? session.endedAt - session.startedAt : 0);
+      blob = await finalizeMp3Blob(blob, {
+        durationMs,
+        title: session.displayName || session.name
+      });
+      log("mp3_metadata_patched", { sessionId, durationMs, patchedSize: blob.size });
+    }
+
     log("blob_loaded", {
       sessionId,
       mp3Id: file.id,
-      actualSize: file.blob.size,
+      actualSize: blob.size,
       expectedSize: file.size,
       mimeType,
       filename
@@ -104,10 +119,10 @@ export async function getMp3BlobForSession(sessionId: string): Promise<Mp3BlobRe
 
     return {
       ok: true,
-      blob: file.blob,
+      blob,
       filename,
       mimeType: "audio/mpeg",
-      size: file.blob.size,
+      size: blob.size,
       sessionId,
       mp3Id: file.id
     };

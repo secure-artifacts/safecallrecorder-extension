@@ -25,12 +25,25 @@ import {
 } from "./extension-storage";
 import { openHelpPage } from "./help-nav";
 import { downloadOriginalRecording } from "./download/original-download-service";
-import { suggestRecordingName } from "./auto-start";
+import {
+  buildRecordingName,
+  createRecordingNameItem,
+  formatDateOnly,
+  formatRecordingDate,
+  MAX_RECORDING_NAME_ITEMS,
+  normalizeRecordingNameConfig,
+  recordingNameIsEmpty,
+  sessionDisplayTitle,
+  type RecordingNameConfig,
+  type RecordingNameItem,
+  type RecordingNamePart
+} from "./recording-name";
 import {
   detectLocalMediaKind,
   isLocalMediaEndedAutoStartEnabled,
   type LocalMediaKind
 } from "./local-media-player";
+import { finalizeWebmDurationBlob } from "./webm-duration";
 import { deviceHint } from "./device-manager";
 import {
   compareSelectedWithBrowser,
@@ -69,6 +82,10 @@ let historyRequestVersion = 0;
 let clearingHistory = false;
 let deletingSessionIds = new Set<string>();
 let playingAudio: { sessionId: string; audio: HTMLAudioElement; url: string } | undefined;
+/** Remembers the export-bitrate dropdown choice across history refreshes. */
+const exportBitrateChoice = new Map<string, number>();
+let lastHistoryListKey = "";
+let historyExportUiHoldUntil = 0;
 
 const HISTORY_CHANNEL_NAME = "safe-call-recorder-history";
 let historyChannel: BroadcastChannel | undefined;
@@ -261,7 +278,7 @@ async function handleLocalMediaEnded() {
   await tryAutoStartRecording("local_media_ended");
 }
 
-function loadLocalMediaFile(file: File) {
+async function loadLocalMediaFile(file: File) {
   clearLocalMedia();
   const kind = detectLocalMediaKind(file);
   if (!kind) {
@@ -269,7 +286,15 @@ function loadLocalMediaFile(file: File) {
     $("localMediaStatus").textContent = "不支持的文件类型。请选择 mp4、webm、mp3、wav 等常见格式。";
     return;
   }
-  const objectUrl = URL.createObjectURL(file);
+  let playable: Blob = file;
+  if (/webm/i.test(file.type) || /\.webm$/i.test(file.name)) {
+    try {
+      playable = await finalizeWebmDurationBlob(file, 0);
+    } catch {
+      playable = file;
+    }
+  }
+  const objectUrl = URL.createObjectURL(playable);
   localMediaLoaded = { file, objectUrl, kind };
   const video = $<HTMLVideoElement>("localMediaVideo");
   const audio = $<HTMLAudioElement>("localMediaAudio");
@@ -329,6 +354,141 @@ async function persistDefaultDevice() {
   }
 }
 
+function recNameKindLabel(kind: RecordingNamePart): string {
+  if (kind === "date") return "日期";
+  if (kind === "number") return "编号";
+  if (kind === "space") return "空格";
+  return "自定义";
+}
+
+function escapeAttr(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function readRecordingNameConfigFromUi(): RecordingNameConfig {
+  const stored = normalizeRecordingNameConfig(settings.recordingName);
+  const storedById = new Map(stored.items.map((item) => [item.id, item]));
+  const items: RecordingNameItem[] = [...$("recNameToggles").querySelectorAll<HTMLElement>(".rec-name-chip[data-id]")].flatMap(
+    (chip) => {
+      const id = chip.dataset.id;
+      const kind = chip.dataset.part as RecordingNamePart | undefined;
+      if (!id || (kind !== "date" && kind !== "number" && kind !== "custom" && kind !== "space")) return [];
+      const prev = storedById.get(id);
+      if (kind === "space") return [createRecordingNameItem("space", { id })];
+      if (kind === "custom") {
+        const input = document.getElementById(`rec-name-custom-${id}`) as HTMLInputElement | null;
+        return [createRecordingNameItem("custom", { id, text: input?.value ?? prev?.text ?? "" })];
+      }
+      if (kind === "number") {
+        const input = document.getElementById(`rec-name-number-${id}`) as HTMLInputElement | null;
+        const seed = input ? Number(input.value) : prev?.numberSeed;
+        return [
+          createRecordingNameItem("number", {
+            id,
+            numberSeed: seed,
+            numberSeedDate: prev?.numberSeedDate
+          })
+        ];
+      }
+      return [createRecordingNameItem("date", { id })];
+    }
+  );
+  return normalizeRecordingNameConfig({
+    items,
+    dateIncludeYear: $<HTMLButtonElement>("recNameDateYmd").classList.contains("active"),
+    numberSeedDate: stored.numberSeedDate
+  });
+}
+
+function renderRecordingNameChips(items: RecordingNameItem[]) {
+  const host = $("recNameToggles");
+  const counts: Record<RecordingNamePart, number> = { date: 0, number: 0, custom: 0, space: 0 };
+  host.innerHTML = items
+    .map((item) => {
+      counts[item.kind] += 1;
+      const n = counts[item.kind];
+      const sameKindTotal = items.filter((i) => i.kind === item.kind).length;
+      const label = sameKindTotal > 1 ? `${recNameKindLabel(item.kind)} ${n}` : recNameKindLabel(item.kind);
+      return `<div class="rec-name-chip included${item.kind === "space" ? " rec-name-chip-space" : ""}" data-id="${item.id}" data-part="${item.kind}">
+        <button type="button" class="rec-name-grip" aria-label="拖动调整顺序" draggable="true">⠿</button>
+        <span class="rec-name-chip-label">${label}</span>
+        <button type="button" class="rec-name-remove" data-remove-id="${item.id}" aria-label="去掉${label}">×</button>
+      </div>`;
+    })
+    .join("");
+}
+
+function renderRecordingNameFields(items: RecordingNameItem[]) {
+  const host = $("recNameItemFields");
+  const counts: Record<"number" | "custom", number> = { number: 0, custom: 0 };
+  const same = {
+    number: items.filter((i) => i.kind === "number").length,
+    custom: items.filter((i) => i.kind === "custom").length
+  };
+  host.innerHTML = items
+    .map((item) => {
+      if (item.kind === "number") {
+        counts.number += 1;
+        const label = same.number > 1 ? `起始编号 ${counts.number}` : "起始编号";
+        return `<div class="rec-name-extra">
+          <label>${label}
+            <input id="rec-name-number-${item.id}" type="number" min="0" max="999999" step="1" value="${item.numberSeed ?? 1}">
+          </label>
+          <p class="hint rec-name-number-hint">今天使用此数字；到了明天会自动加 1。</p>
+        </div>`;
+      }
+      if (item.kind === "custom") {
+        counts.custom += 1;
+        const label = same.custom > 1 ? `自定义文字 ${counts.custom}` : "自定义文字";
+        const value = escapeAttr(item.text ?? "");
+        return `<div class="rec-name-extra">
+          <label>${label}
+            <input id="rec-name-custom-${item.id}" type="text" maxlength="80" placeholder="例如：VK通话" autocomplete="off" spellcheck="false" autocapitalize="off" value="${value}">
+          </label>
+        </div>`;
+      }
+      return "";
+    })
+    .join("");
+}
+
+function syncRecordingNameExtraRows(items: RecordingNameItem[]) {
+  $("recNameDateRow").classList.toggle("hidden", !items.some((i) => i.kind === "date"));
+  $<HTMLButtonElement>("recNameAddBtn").disabled = items.length >= MAX_RECORDING_NAME_ITEMS;
+}
+
+function syncRecordingDateStyleButtons(includeYear: boolean, now = new Date()) {
+  const md = $<HTMLButtonElement>("recNameDateMd");
+  const ymd = $<HTMLButtonElement>("recNameDateYmd");
+  md.textContent = `月日 ${formatRecordingDate(now, false)}`;
+  ymd.textContent = `年月日 ${formatRecordingDate(now, true)}`;
+  md.classList.toggle("active", !includeYear);
+  ymd.classList.toggle("active", includeYear);
+  md.setAttribute("aria-pressed", includeYear ? "false" : "true");
+  ymd.setAttribute("aria-pressed", includeYear ? "true" : "false");
+}
+
+function updateRecordingNamePreview() {
+  const config = readRecordingNameConfigFromUi();
+  const preview = buildRecordingName(config);
+  $<HTMLElement>("recNamePreview").textContent = preview;
+  $<HTMLElement>("recNamePreview").classList.toggle("rec-name-preview-empty", recordingNameIsEmpty(config));
+}
+
+function applyRecordingNameConfigToUi(config: RecordingNameConfig) {
+  const c = normalizeRecordingNameConfig(config);
+  renderRecordingNameChips(c.items);
+  renderRecordingNameFields(c.items);
+  syncRecordingDateStyleButtons(c.dateIncludeYear);
+  syncRecordingNameExtraRows(c.items);
+  updateRecordingNamePreview();
+}
+
+async function persistRecordingNameConfig(config: RecordingNameConfig) {
+  settings.recordingName = normalizeRecordingNameConfig(config);
+  await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+}
+
 async function tryAutoStartRecording(
   reason: "sound_detected" | "local_media" | "local_media_ended",
   meta?: { tabTitle?: string; tabUrl?: string }
@@ -350,12 +510,6 @@ async function tryAutoStartRecording(
 
   autoStartPending = true;
   try {
-    if (reason !== "local_media_ended") {
-      const suggested = suggestRecordingName(meta?.tabTitle, meta?.tabUrl);
-      if (suggested && !$<HTMLInputElement>("recName").value.trim()) {
-        $<HTMLInputElement>("recName").value = suggested;
-      }
-    }
     setStatus(
       reason === "local_media"
         ? "检测到本地媒体播放，正在自动开始录音…"
@@ -440,14 +594,18 @@ function applyHistoryRecords(records: Session[], activeIds?: string[]) {
 function removeSessionsFromUi(sessionIds: string[]) {
   if (!sessionIds.length) return;
   const removed = new Set(sessionIds);
-  for (const id of sessionIds) stopPlaybackIfSession(id);
+  for (const id of sessionIds) {
+    stopPlaybackIfSession(id);
+    exportBitrateChoice.delete(id);
+  }
   historyRecords = historyRecords.filter((r) => !removed.has(r.id));
   console.info("[HistoryDelete]", {
     stage: "ui_removed",
     deletedSessionIds: sessionIds,
     remainingUiCount: historyRecords.length
   });
-  renderHistory(historyRecords, historyActiveIds);
+  lastHistoryListKey = "";
+  renderHistory(historyRecords, historyActiveIds, true);
   updateClearHistoryButton();
 }
 
@@ -810,8 +968,45 @@ function historyLabel(s: Session) {
   }
 }
 
-function renderHistory(sessions: Session[], activeIds: string[]) {
+function historySessionKey(s: Session): string {
+  return [
+    s.id,
+    s.mp3Status,
+    s.mp3Progress,
+    s.hasMp3 ? "1" : "0",
+    s.historyStatus,
+    s.fileSize,
+    s.bitrate,
+    s.originalStatus,
+    s.mp3ProgressLabel,
+    deletingSessionIds.has(s.id) ? "1" : "0"
+  ].join("|");
+}
+
+function historyListKey(sessions: Session[], activeIds: string[]): string {
+  return `${sessions.map(historySessionKey).join(";")}#${activeIds.join(",")}`;
+}
+
+function holdHistoryExportUi(ms = 15000) {
+  historyExportUiHoldUntil = Date.now() + ms;
+}
+
+function isHistoryExportSelectOpen(): boolean {
+  if (Date.now() < historyExportUiHoldUntil) return true;
+  const el = document.activeElement;
+  return Boolean(el instanceof HTMLSelectElement && el.classList.contains("history-export-bitrate"));
+}
+
+function chosenExportBitrate(session: Session): number {
+  return exportBitrateChoice.get(session.id) ?? resolveBitrate(session.bitrate || DEFAULT_BITRATE);
+}
+
+function renderHistory(sessions: Session[], activeIds: string[], force = false) {
   const host = $("history");
+  if (!force && isHistoryExportSelectOpen()) return;
+  const nextKey = historyListKey(sessions, activeIds);
+  if (!force && nextKey === lastHistoryListKey && host.childElementCount > 0) return;
+  lastHistoryListKey = nextKey;
   host.replaceChildren();
   const list = [...sessions].sort((a, b) => b.startedAt - a.startedAt);
   $("historyEmpty").classList.toggle("hidden", list.length > 0);
@@ -825,7 +1020,7 @@ function renderHistory(sessions: Session[], activeIds: string[]) {
     item.className = "history-item";
     item.dataset.sessionId = s.id;
     if (deletingSessionIds.has(s.id)) item.classList.add("deleting");
-    const title = s.displayName || new Date(s.startedAt).toLocaleString();
+    const title = sessionDisplayTitle(s.displayName, s.name);
     const when = new Date(s.startedAt).toLocaleString();
     const dur = fmt(s.durationMs || s.safeDurationMs || 0);
     const size = s.fileSize ? `${(s.fileSize / (1024 * 1024)).toFixed(2)} MB` : "—";
@@ -871,6 +1066,8 @@ function renderHistory(sessions: Session[], activeIds: string[]) {
       help.textContent = "长录音转换可能需要几分钟。你可以继续使用插件或关闭此页面。";
     } else if (s.historyStatus === "interrupted" || s.historyStatus === "partial") {
       help.textContent = "上次异常中断，已保存部分仍然存在。";
+    } else if (!mp3Busy && originalOk) {
+      help.textContent = "可选择任意音质导出 MP3。原始录音仍保留，不会被覆盖。";
     } else {
       help.textContent = "";
     }
@@ -891,18 +1088,19 @@ function renderHistory(sessions: Session[], activeIds: string[]) {
       if (regeneratingSessions.has(s.id) || deletingSessionIds.has(s.id)) return;
       regeneratingSessions.add(s.id);
       try {
+        const target = resolveBitrate(opts.overrideBitrate ?? (s.bitrate || DEFAULT_BITRATE));
         setStatus(`${opts.label}…`);
         await ask(MessageType.ExportSession, {
           sessionId: s.id,
           download: false,
           force: true,
-          forceMono: opts.forceMono ?? (s.bitrate || 0) <= 16000,
-          overrideBitrate: opts.overrideBitrate
+          forceMono: opts.forceMono ?? target <= 16000,
+          overrideBitrate: target
         });
-        setStatus("MP3 已重新生成");
+        setStatus(`已按 ${Math.round(target / 1000)} kbps 生成 MP3`);
         await reloadHistoryVerified("after_regenerate");
         const dl = await downloadRecordingMp3(s.id, "retry");
-        if (dl.ok) setStatus("下载已开始");
+        if (dl.ok) setStatus(`下载已开始：${dl.filename || ""}`);
         else setStatus(friendlyDownloadError(dl.error.code, dl.error.message));
       } catch (e) {
         setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
@@ -980,16 +1178,77 @@ function renderHistory(sessions: Session[], activeIds: string[]) {
       });
     } else if (mp3Busy) {
       add(mp3Label(s), "download", () => setStatus(s.mp3ProgressLabel || "MP3正在后台生成…")).disabled = true;
-    } else if (s.mp3Status !== "skipped") {
-      add("重新生成MP3", "download", () => void regenerate({ label: "正在重新生成 MP3" }));
-      if ((s.bitrate || 0) <= 16000) {
-        add("兼容模式重新生成", "play", () =>
-          void regenerate({ forceMono: true, label: "正在用 16 kbps 单声道兼容模式重新生成" })
-        );
-        add("改用32kbps", "play", () =>
-          void regenerate({ overrideBitrate: 32000, forceMono: false, label: "正在用 32 kbps 重新生成" })
-        );
+    }
+
+    if (originalOk && !mp3Busy) {
+      const exportRow = document.createElement("div");
+      exportRow.className = "history-export";
+      const label = document.createElement("label");
+      label.className = "history-export-label";
+      label.textContent = "导出音质";
+      const sel = document.createElement("select");
+      sel.className = "history-export-bitrate";
+      sel.setAttribute("aria-label", "导出音质");
+      const current = chosenExportBitrate(s);
+      for (const p of BITRATE_PRESETS) {
+        sel.append(new Option(p.label, String(p.bitrate), false, p.bitrate === current));
       }
+      const sizeEl = document.createElement("span");
+      sizeEl.className = "history-export-size";
+      const updateSize = () => {
+        const mb = estimateMp3Mb(Number(sel.value), s.durationMs || s.safeDurationMs || 0);
+        sizeEl.textContent = mb > 0 ? `约 ${mb < 0.1 ? mb.toFixed(2) : mb.toFixed(1)} MB` : "";
+      };
+      updateSize();
+      sel.onmousedown = () => holdHistoryExportUi();
+      sel.onfocus = () => {
+        holdHistoryExportUi();
+        exportBitrateChoice.set(s.id, resolveBitrate(Number(sel.value) || current));
+      };
+      sel.onchange = () => {
+        exportBitrateChoice.set(s.id, resolveBitrate(Number(sel.value)));
+        updateSize();
+        holdHistoryExportUi(800);
+      };
+      sel.onblur = () => holdHistoryExportUi(400);
+      const exportBtn = document.createElement("button");
+      exportBtn.type = "button";
+      exportBtn.className = "btn small download";
+      exportBtn.textContent = "导出MP3";
+      exportBtn.disabled = isDeleting;
+      exportBtn.onclick = () => {
+        const target = resolveBitrate(Number(sel.value) || chosenExportBitrate(s));
+        exportBitrateChoice.set(s.id, target);
+        const sameAsCurrent = canDownloadMp3 && target === resolveBitrate(s.bitrate || DEFAULT_BITRATE);
+        if (sameAsCurrent) {
+          void (async () => {
+            exportBtn.disabled = true;
+            exportBtn.textContent = "正在读取……";
+            try {
+              const result = await downloadRecordingMp3(s.id, "manual");
+              if (!result.ok) {
+                setStatus(friendlyDownloadError(result.error.code, result.error.message));
+                return;
+              }
+              setStatus(`下载已开始：${result.filename}`);
+            } catch (e) {
+              setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+            } finally {
+              exportBtn.textContent = "导出MP3";
+              exportBtn.disabled = false;
+            }
+          })();
+          return;
+        }
+        void regenerate({
+          overrideBitrate: target,
+          label: `正在按 ${Math.round(target / 1000)} kbps 导出 MP3`
+        });
+      };
+      exportRow.append(label, sel, sizeEl, exportBtn);
+      actions.append(exportRow);
+    } else if (!originalOk && !canDownloadMp3 && !mp3Busy && s.mp3Status !== "skipped") {
+      add("重新生成MP3", "download", () => void regenerate({ label: "正在重新生成 MP3" }));
     }
 
     if (mp3Failed || s.originalStatus === "download_failed") {
@@ -1013,7 +1272,7 @@ function renderHistory(sessions: Session[], activeIds: string[]) {
       const sessionId = s.id;
       console.info("[HistoryDelete]", { stage: "button_clicked", sessionId });
       deletingSessionIds.add(sessionId);
-      renderHistory(historyRecords, historyActiveIds);
+      renderHistory(historyRecords, historyActiveIds, true);
       invalidateHistoryReads("delete_started");
       try {
         const result = (await ask(MessageType.DeleteSession, { sessionId })) as {
@@ -1038,7 +1297,7 @@ function renderHistory(sessions: Session[], activeIds: string[]) {
         await reloadHistoryVerified("after_delete");
       } catch (e) {
         deletingSessionIds.delete(sessionId);
-        renderHistory(historyRecords, historyActiveIds);
+        renderHistory(historyRecords, historyActiveIds, true);
         setStatus("删除不完整，请重试。" + friendlyError(e instanceof Error ? e.message : String(e)));
       }
     });
@@ -1140,11 +1399,14 @@ async function startRecording() {
       throw new Error("本地存储空间不足，请先删除旧录音。");
     }
     const deviceLabel = devices.find((d) => d.deviceId === deviceId)?.label || "声音设备";
+    const nameConfig = readRecordingNameConfigFromUi();
+    await persistRecordingNameConfig(nameConfig);
+    const displayName = buildRecordingName(nameConfig);
     const session = (await ask(MessageType.StartRecording, {
       mode: "device",
       deviceId,
       deviceLabel,
-      displayName: $<HTMLInputElement>("recName").value.trim(),
+      displayName,
       bitrate,
       mixed: false
     })) as Session;
@@ -1273,10 +1535,130 @@ $("device").onchange = () => {
   void startPreview();
 };
 $("verifyDeviceBtn").onclick = () => void refreshDeviceVerification(true);
+function setRecordingNameEditorOpen(open: boolean) {
+  $("recNameEditor").classList.toggle("hidden", !open);
+  const btn = $<HTMLButtonElement>("recNameEditToggle");
+  btn.textContent = open ? "收起" : "修改";
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  if (!open) $("recNameAddMenu").classList.add("hidden");
+}
+
+async function addRecordingNameItem(kind: RecordingNamePart) {
+  const config = readRecordingNameConfigFromUi();
+  if (config.items.length >= MAX_RECORDING_NAME_ITEMS) return;
+  const extras =
+    kind === "number" ? { numberSeed: 1, numberSeedDate: formatDateOnly(new Date()) } : kind === "custom" ? { text: "" } : {};
+  config.items.push(createRecordingNameItem(kind, extras));
+  applyRecordingNameConfigToUi(config);
+  await persistRecordingNameConfig(config);
+  const added = config.items.at(-1);
+  if (!added) return;
+  const focusId = kind === "custom" ? `rec-name-custom-${added.id}` : kind === "number" ? `rec-name-number-${added.id}` : "";
+  if (focusId) (document.getElementById(focusId) as HTMLInputElement | null)?.focus();
+}
+
+async function removeRecordingNameItem(id: string) {
+  const config = readRecordingNameConfigFromUi();
+  config.items = config.items.filter((item) => item.id !== id);
+  applyRecordingNameConfigToUi(config);
+  await persistRecordingNameConfig(config);
+}
+
+$("recNameEditToggle").onclick = () => {
+  const open = $("recNameEditor").classList.contains("hidden");
+  setRecordingNameEditorOpen(open);
+};
+$("recNameAddBtn").onclick = (e) => {
+  e.stopPropagation();
+  $("recNameAddMenu").classList.toggle("hidden");
+};
+for (const btn of $("recNameAddMenu").querySelectorAll<HTMLButtonElement>("[data-add]")) {
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    const part = btn.dataset.add as RecordingNamePart;
+    $("recNameAddMenu").classList.add("hidden");
+    if (part) void addRecordingNameItem(part);
+  };
+}
+$("recNameToggles").addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-remove-id]");
+  const id = btn?.dataset.removeId;
+  if (id) void removeRecordingNameItem(id);
+});
+document.addEventListener("click", (e) => {
+  const wrap = $("recNameAddBtn").parentElement;
+  if (wrap && !wrap.contains(e.target as Node)) $("recNameAddMenu").classList.add("hidden");
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("recNameAddMenu").classList.add("hidden");
+});
+
+async function persistRecordingDateStyle(includeYear: boolean) {
+  syncRecordingDateStyleButtons(includeYear);
+  updateRecordingNamePreview();
+  await persistRecordingNameConfig(readRecordingNameConfigFromUi());
+}
+$("recNameDateMd").onclick = () => void persistRecordingDateStyle(false);
+$("recNameDateYmd").onclick = () => void persistRecordingDateStyle(true);
+
+let recNameDragId: string | null = null;
+$("recNameToggles").addEventListener("dragstart", (e) => {
+  const chip = (e.target as HTMLElement).closest<HTMLElement>(".rec-name-chip[data-id]");
+  if (!chip) return;
+  recNameDragId = chip.dataset.id || null;
+  chip.classList.add("dragging");
+  e.dataTransfer?.setData("text/plain", recNameDragId || "");
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+});
+$("recNameToggles").addEventListener("dragend", () => {
+  recNameDragId = null;
+  $("recNameToggles")
+    .querySelectorAll(".rec-name-chip.dragging, .rec-name-chip.drag-over")
+    .forEach((el) => el.classList.remove("dragging", "drag-over"));
+});
+$("recNameToggles").addEventListener("dragover", (e) => {
+  e.preventDefault();
+  const chip = (e.target as HTMLElement).closest<HTMLElement>(".rec-name-chip[data-id]");
+  $("recNameToggles").querySelectorAll(".rec-name-chip.drag-over").forEach((el) => el.classList.remove("drag-over"));
+  if (chip && recNameDragId && chip.dataset.id !== recNameDragId) chip.classList.add("drag-over");
+});
+$("recNameToggles").addEventListener("drop", (e) => {
+  e.preventDefault();
+  const chip = (e.target as HTMLElement).closest<HTMLElement>(".rec-name-chip[data-id]");
+  chip?.classList.remove("drag-over");
+  const from = recNameDragId;
+  const to = chip?.dataset.id;
+  if (!from || !to || from === to) return;
+  const config = readRecordingNameConfigFromUi();
+  const fromIdx = config.items.findIndex((item) => item.id === from);
+  const toIdx = config.items.findIndex((item) => item.id === to);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = config.items.splice(fromIdx, 1);
+  if (!moved) return;
+  config.items.splice(toIdx, 0, moved);
+  applyRecordingNameConfigToUi(config);
+  void persistRecordingNameConfig(config);
+});
+
+$("recNameItemFields").addEventListener("change", (e) => {
+  const input = e.target as HTMLInputElement;
+  if (input.id.startsWith("rec-name-number-")) {
+    const id = input.id.slice("rec-name-number-".length);
+    const config = readRecordingNameConfigFromUi();
+    const item = config.items.find((i) => i.id === id && i.kind === "number");
+    if (item) item.numberSeedDate = formatDateOnly(new Date());
+    applyRecordingNameConfigToUi(config);
+    void persistRecordingNameConfig(config);
+  }
+});
+$("recNameItemFields").addEventListener("input", () => {
+  updateRecordingNamePreview();
+  void persistRecordingNameConfig(readRecordingNameConfigFromUi());
+});
 $("localMediaFile").onchange = () => {
   const file = $<HTMLInputElement>("localMediaFile").files?.[0];
   if (!file) return;
-  loadLocalMediaFile(file);
+  void loadLocalMediaFile(file);
   $<HTMLInputElement>("localMediaFile").value = "";
 };
 $("localMediaPlayBtn").onclick = () => void playLocalMedia();
@@ -1286,6 +1668,7 @@ $("stop").onclick = () => void stopRecording();
 $("settingsBtn").onclick = () => $("settingsPanel").classList.toggle("hidden");
 $("helpBtn").onclick = () => void openHelpOrAsk();
 $("helpDevicesLink").onclick = () => void openHelpOrAsk("devices");
+$("helpNameLink").onclick = () => void openHelpOrAsk("name");
 $("helpBitrateLink").onclick = () => void openHelpOrAsk("bitrate");
 $("onboardingOpenHelp").onclick = () => void openHelpOrAsk("quickstart");
 $("onboardingDismiss").onclick = async () => {
@@ -1566,6 +1949,7 @@ void (async () => {
   await refresh();
   syncOnboardingCard();
   syncAutoStartSettingsUi();
+  applyRecordingNameConfigToUi(normalizeRecordingNameConfig(settings.recordingName));
   updateLocalMediaUi();
   if (new URLSearchParams(location.search).get("openSettings") === "1") {
     $("settingsPanel").classList.remove("hidden");

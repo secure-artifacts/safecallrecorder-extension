@@ -3,17 +3,30 @@ import { resolveBitrate } from "./bitrate-presets";
 import { downloadRecordingMp3, verifyMp3Persisted } from "./download/mp3-download-service";
 import {
   assemblePartWebm,
+  chunksForPart,
   downloadOriginalRecording,
   partsForSession
 } from "./download/original-download-service";
 import { mixToMono, shouldExportMono, toMp3Kbps } from "./mp3-params";
+import { finalizeMp3Blob } from "./mp3-metadata";
 import { storage } from "./storage-manager";
-import { id, type Mp3File, type Session } from "./types";
+import { id, type Chunk, type Mp3File, type Session } from "./types";
+import {
+  groupChunksIntoWindows,
+  looksLikeWebm,
+  MAX_DECODE_WINDOW_BYTES,
+  MAX_DECODE_WINDOW_MS,
+  mediaClusterSlices,
+  splitWebmInitAndMedia,
+  type DecodeWindow
+} from "./webm-decode-windows";
 
-/** Soft cap per assembled WebM part before decode attempt (still try; fail gracefully). */
-const WARN_DECODE_BYTES = 60 * 1024 * 1024;
 /** PCM slice for streaming encode (~30s at 48kHz mono samples). */
 const PCM_SLICE_SAMPLES = 48_000 * 30;
+
+function bytesAsBlobPart(bytes: Uint8Array): BlobPart {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
 const encodingSessions = new Set<string>();
 
 export type Mp3Stage =
@@ -71,8 +84,8 @@ function userFacingMp3Error(e: unknown): string {
   if (/内存|memory|allocation|OOM|Array buffer/i.test(msg)) {
     return "生成MP3时内存不足（长录音请使用已下载的原始录音），原始录音仍然安全保存。";
   }
-  if (/Chunk|数据不完整|没有可转换|TOO_LARGE/i.test(msg) || code === "TOO_LARGE") {
-    return "录音过长，无法一次性转换为MP3。原始录音已保留，请下载原始文件。";
+  if (/数据不完整|没有可转换|TOO_LARGE/i.test(msg) || code === "TOO_LARGE") {
+    return "无法转换这段录音为MP3。原始录音已保留，请重试生成或下载原始文件。";
   }
   if (/Worker|后台/i.test(msg)) {
     return "MP3后台处理组件发生错误，可以重新加载插件后再次生成。";
@@ -95,15 +108,31 @@ async function updateMp3Progress(
   await storage.saveSession(session);
 }
 
-/** Stream PCM slices into a persistent lamejs worker session. */
-async function encodeMp3Streaming(
-  left: Float32Array,
-  right: Float32Array | undefined,
-  sampleRate: number,
-  channels: number,
-  bitrateBps: number,
-  onSlice?: (doneSamples: number, totalSamples: number) => void
-): Promise<{ blob: Blob; kbps: number; channels: number }> {
+type Mp3WorkerReply = {
+  ok: boolean;
+  mp3?: ArrayBuffer;
+  mp3Slice?: ArrayBuffer;
+  error?: string;
+  stage?: string;
+  kbps?: number;
+  channels?: number;
+};
+
+type Mp3WorkerSession = {
+  worker: Worker;
+  requestId: string;
+  nextMessage: () => Promise<Mp3WorkerReply>;
+  kbps: number;
+  channels: number;
+  mp3Parts: BlobPart[];
+};
+
+function collectWorkerMp3(session: Mp3WorkerSession, reply: Mp3WorkerReply) {
+  if (reply.mp3Slice) session.mp3Parts.push(reply.mp3Slice);
+  if (reply.mp3) session.mp3Parts.push(reply.mp3);
+}
+
+function createMp3WorkerSession(): Mp3WorkerSession {
   let worker: Worker;
   try {
     worker = new Worker(workerUrl());
@@ -114,27 +143,11 @@ async function encodeMp3Streaming(
   }
 
   const requestId = id();
-
   const nextMessage = () =>
-    new Promise<{
-      ok: boolean;
-      mp3?: ArrayBuffer;
-      error?: string;
-      stage?: string;
-      kbps?: number;
-      channels?: number;
-    }>((resolve, reject) => {
+    new Promise<Mp3WorkerReply>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("MP3转换超时")), 30 * 60 * 1000);
       const onMsg = (ev: MessageEvent) => {
-        const data = ev.data as {
-          requestId: string;
-          ok: boolean;
-          mp3?: ArrayBuffer;
-          error?: string;
-          stage?: string;
-          kbps?: number;
-          channels?: number;
-        };
+        const data = ev.data as Mp3WorkerReply & { requestId: string };
         if (data.requestId !== requestId) return;
         clearTimeout(timer);
         worker.removeEventListener("message", onMsg);
@@ -153,80 +166,267 @@ async function encodeMp3Streaming(
       };
     });
 
-  try {
-    worker.postMessage({
-      type: "start",
-      requestId,
-      sampleRate,
-      channels,
-      bitrate: bitrateBps
-    });
-    const started = await nextMessage();
-    if (!started.ok) {
-      throw new Mp3ConversionError("init_worker", "WORKER_LOAD_FAILED", started.error || "编码器启动失败");
-    }
+  return { worker, requestId, nextMessage, kbps: 0, channels: 1, mp3Parts: [] };
+}
 
-    const total = left.length;
-    for (let i = 0; i < total; i += PCM_SLICE_SAMPLES) {
-      const end = Math.min(i + PCM_SLICE_SAMPLES, total);
-      const leftSlice = left.slice(i, end);
-      const rightSlice = right ? right.slice(i, end) : undefined;
-      const transfer: Transferable[] = [leftSlice.buffer];
-      if (rightSlice) transfer.push(rightSlice.buffer);
-      const pending = nextMessage();
-      worker.postMessage({ type: "pcm", requestId, left: leftSlice, right: rightSlice }, transfer);
-      const ack = await pending;
-      if (!ack.ok) {
-        throw new Mp3ConversionError("encode_mp3", "ENCODE_FAILED", ack.error || "PCM 编码失败", {
-          workerStage: ack.stage
-        });
-      }
-      onSlice?.(end, total);
-    }
+async function startMp3WorkerSession(
+  session: Mp3WorkerSession,
+  sampleRate: number,
+  channels: number,
+  bitrateBps: number
+) {
+  session.worker.postMessage({
+    type: "start",
+    requestId: session.requestId,
+    sampleRate,
+    channels,
+    bitrate: bitrateBps
+  });
+  const started = await session.nextMessage();
+  if (!started.ok) {
+    throw new Mp3ConversionError("init_worker", "WORKER_LOAD_FAILED", started.error || "编码器启动失败");
+  }
+  session.kbps = toMp3Kbps(bitrateBps);
+  session.channels = channels;
+}
 
-    const pendingFinish = nextMessage();
-    worker.postMessage({ type: "finish", requestId });
-    const result = await pendingFinish;
-    if (!result.ok || !result.mp3) {
-      throw new Mp3ConversionError("encode_mp3", "ENCODE_FAILED", result.error || "MP3 无输出", {
-        workerStage: result.stage
+async function feedMp3WorkerSession(
+  session: Mp3WorkerSession,
+  left: Float32Array,
+  right: Float32Array | undefined,
+  onSlice?: (doneSamples: number, totalSamples: number) => void
+) {
+  const total = left.length;
+  for (let i = 0; i < total; i += PCM_SLICE_SAMPLES) {
+    const end = Math.min(i + PCM_SLICE_SAMPLES, total);
+    const leftSlice = left.slice(i, end);
+    const rightSlice = right ? right.slice(i, end) : undefined;
+    const transfer: Transferable[] = [leftSlice.buffer];
+    if (rightSlice) transfer.push(rightSlice.buffer);
+    const pending = session.nextMessage();
+    session.worker.postMessage(
+      { type: "pcm", requestId: session.requestId, left: leftSlice, right: rightSlice },
+      transfer
+    );
+    const ack = await pending;
+    if (!ack.ok) {
+      throw new Mp3ConversionError("encode_mp3", "ENCODE_FAILED", ack.error || "PCM 编码失败", {
+        workerStage: ack.stage
       });
     }
-    return {
-      blob: new Blob([result.mp3], { type: "audio/mpeg" }),
-      kbps: result.kbps || toMp3Kbps(bitrateBps),
-      channels: result.channels || channels
-    };
-  } finally {
-    worker.terminate();
+    collectWorkerMp3(session, ack);
+    onSlice?.(end, total);
   }
 }
 
-async function decodeWebmToBuffer(blob: Blob): Promise<AudioBuffer> {
-  const ac = new AudioContext();
-  try {
-    const raw = await blob.arrayBuffer();
-    return await ac.decodeAudioData(raw.slice(0));
-  } catch (e) {
-    throw new Mp3ConversionError("decode_webm", "DECODE_FAILED", e instanceof Error ? e.message : String(e), {
-      mimeType: blob.type,
-      size: blob.size
+async function finishMp3WorkerSession(session: Mp3WorkerSession): Promise<{ blob: Blob; kbps: number; channels: number }> {
+  const pendingFinish = session.nextMessage();
+  session.worker.postMessage({ type: "finish", requestId: session.requestId });
+  const result = await pendingFinish;
+  if (!result.ok) {
+    throw new Mp3ConversionError("encode_mp3", "ENCODE_FAILED", result.error || "MP3 无输出", {
+      workerStage: result.stage
     });
+  }
+  collectWorkerMp3(session, result);
+  if (!session.mp3Parts.length) {
+    throw new Mp3ConversionError("encode_mp3", "ENCODE_FAILED", result.error || "MP3 无输出", {
+      workerStage: result.stage
+    });
+  }
+  return {
+    blob: new Blob(session.mp3Parts, { type: "audio/mpeg" }),
+    kbps: result.kbps || session.kbps,
+    channels: result.channels || session.channels
+  };
+}
+
+/** Stream PCM slices into a persistent lamejs worker session (one part). */
+async function encodeMp3Streaming(
+  left: Float32Array,
+  right: Float32Array | undefined,
+  sampleRate: number,
+  channels: number,
+  bitrateBps: number,
+  onSlice?: (doneSamples: number, totalSamples: number) => void
+): Promise<{ blob: Blob; kbps: number; channels: number }> {
+  const session = createMp3WorkerSession();
+  try {
+    await startMp3WorkerSession(session, sampleRate, channels, bitrateBps);
+    await feedMp3WorkerSession(session, left, right, onSlice);
+    return await finishMp3WorkerSession(session);
   } finally {
-    await ac.close().catch(() => undefined);
+    session.worker.terminate();
   }
 }
 
-async function uniqueFileName(displayName: string | undefined, startedAt: number): Promise<string> {
+class ReusableWebmDecoder {
+  private ac?: AudioContext;
+
+  async decode(blob: Blob): Promise<AudioBuffer> {
+    this.ac ??= new AudioContext();
+    if (this.ac.state === "suspended") await this.ac.resume().catch(() => undefined);
+    const raw = await blob.arrayBuffer();
+    return this.ac.decodeAudioData(raw.slice(0));
+  }
+
+  async close() {
+    if (!this.ac) return;
+    await this.ac.close().catch(() => undefined);
+    this.ac = undefined;
+  }
+}
+
+async function tryDecodeWebm(decoder: ReusableWebmDecoder, blobs: Blob[]): Promise<AudioBuffer | undefined> {
+  try {
+    const buffer = await decoder.decode(new Blob(blobs, { type: "audio/webm" }));
+    return buffer.length > 0 ? buffer : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function decodeWindowRecursive(
+  decoder: ReusableWebmDecoder,
+  init: Uint8Array | undefined,
+  window: DecodeWindow
+): Promise<AudioBuffer[]> {
+  const usesInit = window.startIndex > 0 && init;
+  const primary = usesInit ? [new Blob([bytesAsBlobPart(init)]), ...window.blobs] : window.blobs;
+  const decoded = await tryDecodeWebm(decoder, primary);
+  if (decoded) return [decoded];
+
+  if (window.blobs.length <= 1) {
+    if (usesInit) {
+      const again = await tryDecodeWebm(decoder, window.blobs);
+      if (again) return [again];
+    }
+    return [];
+  }
+
+  const mid = Math.ceil(window.blobs.length / 2);
+  const left: DecodeWindow = {
+    blobs: window.blobs.slice(0, mid),
+    size: 0,
+    durationMs: 0,
+    startIndex: window.startIndex,
+    endIndex: window.startIndex + mid - 1
+  };
+  const right: DecodeWindow = {
+    blobs: window.blobs.slice(mid),
+    size: 0,
+    durationMs: 0,
+    startIndex: window.startIndex + mid,
+    endIndex: window.endIndex
+  };
+  const out = await decodeWindowRecursive(decoder, init, left);
+  out.push(...(await decodeWindowRecursive(decoder, init, right)));
+  return out;
+}
+
+async function expandOversizedChunks(
+  chunks: Chunk[]
+): Promise<Array<{ blob: Blob; size: number; durationMs: number }>> {
+  const out: Array<{ blob: Blob; size: number; durationMs: number }> = [];
+  for (const chunk of chunks) {
+    if (chunk.size <= MAX_DECODE_WINDOW_BYTES) {
+      out.push(chunk);
+      continue;
+    }
+    const bytes = new Uint8Array(await chunk.blob.arrayBuffer());
+    const slices = mediaClusterSlices(bytes, MAX_DECODE_WINDOW_BYTES);
+    if (slices.length <= 1) {
+      out.push(chunk);
+      continue;
+    }
+    const perMs = Math.round((chunk.durationMs || 0) / slices.length);
+    for (let i = 0; i < slices.length; i++) {
+      const slice = slices[i]!;
+      const includeHeader = i === 0 && chunk === chunks[0] && looksLikeWebm(bytes);
+      const end = slice.byteOffset - bytes.byteOffset + slice.byteLength;
+      const payload = includeHeader ? bytes.subarray(0, end) : slice;
+      out.push({
+        blob: new Blob([bytesAsBlobPart(payload)], { type: chunk.mimeType }),
+        size: payload.byteLength,
+        durationMs: perMs
+      });
+    }
+  }
+  return out;
+}
+
+async function decodeWebmWindows(
+  decoder: ReusableWebmDecoder,
+  chunks: Chunk[],
+  onDecoded: (buffer: AudioBuffer, windowIndex: number, windowCount: number) => Promise<void>
+): Promise<number> {
+  if (!chunks.length) return 0;
+  const firstBytes = new Uint8Array(await chunks[0]!.blob.arrayBuffer());
+  const split = looksLikeWebm(firstBytes) ? splitWebmInitAndMedia(firstBytes) : null;
+  const init = split?.init.slice() ?? (looksLikeWebm(firstBytes) ? firstBytes.slice() : undefined);
+  const expanded = await expandOversizedChunks(chunks);
+  const windows = groupChunksIntoWindows(expanded, {
+    maxBytes: MAX_DECODE_WINDOW_BYTES,
+    maxDurationMs: MAX_DECODE_WINDOW_MS
+  });
+  let decodedCount = 0;
+  for (let i = 0; i < windows.length; i++) {
+    const buffers = await decodeWindowRecursive(decoder, init, windows[i]!);
+    for (const buffer of buffers) {
+      await onDecoded(buffer, i + 1, windows.length);
+      decodedCount += 1;
+    }
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  return decodedCount;
+}
+
+async function feedMp3WorkerFromBuffer(
+  session: Mp3WorkerSession,
+  buffer: AudioBuffer,
+  forceMono: boolean,
+  onSlice?: (doneSamples: number, totalSamples: number) => void
+): Promise<{ sampleRate: number; channels: number; durationMs: number }> {
+  const leftSrc = buffer.getChannelData(0);
+  const rightSrc = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : undefined;
+  const total = leftSrc.length;
+  const sampleRate = buffer.sampleRate || 48000;
+  for (let i = 0; i < total; i += PCM_SLICE_SAMPLES) {
+    const end = Math.min(i + PCM_SLICE_SAMPLES, total);
+    const leftSlice = forceMono && rightSrc
+      ? mixToMono(leftSrc.subarray(i, end), rightSrc.subarray(i, end))
+      : leftSrc.slice(i, end);
+    const rightSlice = !forceMono && rightSrc ? rightSrc.slice(i, end) : undefined;
+    const transfer: Transferable[] = [leftSlice.buffer];
+    if (rightSlice) transfer.push(rightSlice.buffer);
+    const pending = session.nextMessage();
+    session.worker.postMessage(
+      { type: "pcm", requestId: session.requestId, left: leftSlice, right: rightSlice },
+      transfer
+    );
+    const ack = await pending;
+    if (!ack.ok) {
+      throw new Mp3ConversionError("encode_mp3", "ENCODE_FAILED", ack.error || "PCM 编码失败", {
+        workerStage: ack.stage
+      });
+    }
+    collectWorkerMp3(session, ack);
+    onSlice?.(end, total);
+  }
+  const channels = forceMono || !rightSrc ? 1 : 2;
+  return { sampleRate, channels, durationMs: (total / sampleRate) * 1000 };
+}
+
+async function uniqueFileName(displayName: string | undefined): Promise<string> {
   const existing = await storage.all<Session>("sessions");
   const names = new Set(existing.map((s) => s.mp3FileName).filter(Boolean) as string[]);
   let n = 0;
   while (n < 100) {
-    const tryName = n === 0 ? buildMp3FileName(displayName, startedAt) : buildMp3FileName(displayName, startedAt, n + 1);
+    const tryName = buildMp3FileName(displayName, n === 0 ? 0 : n + 1);
     if (!names.has(tryName)) return tryName;
     n += 1;
   }
-  return buildMp3FileName(displayName, startedAt, Date.now() % 10000);
+  return buildMp3FileName(displayName, Date.now() % 10000);
 }
 
 function looksLikeMp3(blob: Blob): boolean {
@@ -273,11 +473,12 @@ export async function convertSessionToMp3(
     libraryVersion: "1.2.1 (streaming worker)"
   };
 
-  const mp3Parts: Blob[] = [];
   let sampleRate = 48000;
   let outChannels = 1;
   let totalDurationMs = session.durationMs || session.safeDurationMs || 0;
   let processedMs = 0;
+  const encoder = { session: null as Mp3WorkerSession | null, started: false };
+  const decoder = new ReusableWebmDecoder();
 
   try {
     stage = "read_parts";
@@ -299,86 +500,96 @@ export async function convertSessionToMp3(
       );
       onProgress?.(`正在解码音频分段 ${pi + 1}/${parts.length}…`);
 
-      const assembled = await assemblePartWebm(part);
-      if (!assembled || assembled.size <= 0) continue;
-
-      if (assembled.size > WARN_DECODE_BYTES) {
-        console.warn("[MP3] large part", { partId: part.id, size: assembled.size });
-      }
+      const chunks = await chunksForPart(part.id);
+      if (!chunks.length) continue;
 
       stage = "decode_webm";
-      let buffer: AudioBuffer;
-      try {
-        buffer = await decodeWebmToBuffer(assembled.blob);
-      } catch (e) {
-        // Skip damaged part; continue others.
-        console.error("[MP3] part decode failed, skipping", part.id, e);
-        continue;
-      }
+      const decodedWindows = await decodeWebmWindows(
+        decoder,
+        chunks,
+        async (buffer, windowIndex, windowCount) => {
+          sampleRate = buffer.sampleRate || sampleRate;
+          stage = "channel_prepare";
+          outChannels = forceMono || buffer.numberOfChannels < 2 ? 1 : 2;
 
-      sampleRate = buffer.sampleRate;
-      stage = "channel_prepare";
-      let left = new Float32Array(buffer.getChannelData(0));
-      let right =
-        buffer.numberOfChannels > 1 ? new Float32Array(buffer.getChannelData(1)) : undefined;
-      // Release AudioBuffer references ASAP
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (buffer as any) = null;
+          if (!encoder.session) {
+            stage = "init_worker";
+            encoder.session = createMp3WorkerSession();
+          }
+          if (!encoder.started) {
+            await startMp3WorkerSession(encoder.session, sampleRate, outChannels, targetBitrate);
+            encoder.started = true;
+          } else if (encoder.session.channels !== outChannels) {
+            throw new Mp3ConversionError(
+              "encode_mp3",
+              "CHANNEL_MISMATCH",
+              "录音分段声道不一致，无法合并为单个 MP3"
+            );
+          }
 
-      outChannels = right ? 2 : 1;
-      if (forceMono) {
-        left = new Float32Array(mixToMono(left, right));
-        right = undefined;
-        outChannels = 1;
-      }
-
-      const partDurationMs = (left.length / sampleRate) * 1000;
-      stage = "encode_mp3";
-      await updateMp3Progress(
-        session,
-        "encoding",
-        Math.round(40 + (pi / parts.length) * 50),
-        `正在生成MP3：已处理${fmtDur(processedMs)} / ${fmtDur(totalDurationMs || processedMs + partDurationMs)}`
-      );
-      onProgress?.("正在生成 MP3…");
-
-      const encoded = await encodeMp3Streaming(
-        left,
-        right,
-        sampleRate,
-        outChannels,
-        targetBitrate,
-        (done, total) => {
-          const sliceMs = (done / sampleRate) * 1000;
-          void updateMp3Progress(
-            session,
-            "encoding",
-            Math.min(95, Math.round(40 + ((pi + done / total) / parts.length) * 50)),
-            `正在生成MP3：已处理${fmtDur(processedMs + sliceMs)} / ${fmtDur(totalDurationMs || processedMs + partDurationMs)}`
+          stage = "encode_mp3";
+          const fed = await feedMp3WorkerFromBuffer(
+            encoder.session,
+            buffer,
+            forceMono,
+            (done, total) => {
+              const sliceMs = (done / sampleRate) * 1000;
+              void updateMp3Progress(
+                session,
+                "encoding",
+                Math.min(
+                  95,
+                  Math.round(40 + ((pi + (windowIndex - 1 + done / total) / windowCount) / parts.length) * 50)
+                ),
+                `正在生成MP3：已处理${fmtDur(processedMs + sliceMs)} / ${fmtDur(totalDurationMs || processedMs + sliceMs)}`
+              );
+            }
+          );
+          processedMs += fed.durationMs;
+          onProgress?.(
+            `正在生成 MP3… ${fmtDur(processedMs)}${totalDurationMs ? ` / ${fmtDur(totalDurationMs)}` : ""}`
           );
         }
       );
-      mp3Parts.push(encoded.blob);
-      processedMs += partDurationMs;
-      // Drop PCM
-      left = new Float32Array(0);
-      right = undefined;
+      if (!decodedWindows) {
+        console.error("[MP3] part decode produced no windows", part.id, { chunkCount: chunks.length });
+      }
     }
 
-    if (!mp3Parts.length) {
+    if (!encoder.session || !encoder.started) {
       throw new Mp3ConversionError("assemble_webm", "NO_AUDIO", "没有可转换的录音数据");
     }
+    if (totalDurationMs > 90_000 && processedMs < totalDurationMs * 0.5) {
+      throw new Mp3ConversionError(
+        "decode_webm",
+        "INCOMPLETE",
+        "部分长录音未能解码，请重试生成MP3。原始录音已保留。"
+      );
+    }
+
+    stage = "encode_mp3";
+    const encoded = await finishMp3WorkerSession(encoder.session);
+    encoder.session.worker.terminate();
+    encoder.session = null;
 
     stage = "validate_mp3";
     await updateMp3Progress(session, "validating", 96, "正在校验 MP3…");
-    const blob = mp3Parts.length === 1 ? mp3Parts[0]! : new Blob(mp3Parts, { type: "audio/mpeg" });
+    let blob = encoded.blob;
+    const durationMs =
+      totalDurationMs ||
+      processedMs ||
+      (session.endedAt && session.startedAt ? session.endedAt - session.startedAt : session.safeDurationMs);
+    blob = await finalizeMp3Blob(blob, {
+      durationMs: durationMs || 0,
+      title: session.displayName || session.name
+    });
     if (!looksLikeMp3(blob) || blob.size < 64) {
       throw new Mp3ConversionError("validate_mp3", "INVALID_OUTPUT", "生成的 MP3 无效或过小");
     }
 
     stage = "save_mp3";
     session.bitrate = targetBitrate;
-    const fileName = await uniqueFileName(session.displayName || session.name, session.startedAt);
+    const fileName = await uniqueFileName(session.displayName || session.name);
     const file: Mp3File = {
       id: id(),
       sessionId,
@@ -414,6 +625,7 @@ export async function convertSessionToMp3(
     console.info("[MP3] success", { ...logBase, mp3Bytes: blob.size });
     return file;
   } catch (e) {
+    if (encoder.session) encoder.session.worker.terminate();
     const friendly = userFacingMp3Error(e);
     session.hasMp3 = false;
     session.mp3Error = friendly;
@@ -440,6 +652,7 @@ export async function convertSessionToMp3(
     err.message = friendly;
     throw err;
   } finally {
+    await decoder.close();
     encodingSessions.delete(sessionId);
   }
 }
@@ -504,4 +717,4 @@ export function isMp3Encoding(sessionId: string) {
   return encodingSessions.has(sessionId);
 }
 
-export { downloadOriginalRecording, partsForSession, assemblePartWebm };
+export { downloadOriginalRecording, partsForSession, assemblePartWebm, chunksForPart };

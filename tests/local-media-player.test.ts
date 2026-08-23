@@ -12,6 +12,8 @@ describe("local media player", () => {
     expect(detectLocalMediaKind(new File([], "clip.mp4", { type: "video/mp4" }))).toBe("video");
     expect(detectLocalMediaKind(new File([], "song.mp3", { type: "audio/mpeg" }))).toBe("audio");
     expect(detectLocalMediaKind(new File([], "voice.wav", { type: "" }))).toBe("audio");
+    expect(detectLocalMediaKind(new File([], "rec.webm", { type: "audio/webm" }))).toBe("audio");
+    expect(detectLocalMediaKind(new File([], "rec_original.webm", { type: "" }))).toBe("audio");
     expect(detectLocalMediaKind(new File([], "notes.txt", { type: "text/plain" }))).toBe(null);
   });
 

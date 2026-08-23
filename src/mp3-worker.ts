@@ -81,19 +81,33 @@ function encodeAll(
   }
 }
 
-function assemble(parts: Int8Array[]): ArrayBuffer {
+function concatParts(parts: Int8Array[]): ArrayBuffer | undefined {
   const total = parts.reduce((n, p) => n + p.length, 0);
-  if (total < 32) throw new Error("MP3 输出过小，可能编码失败");
+  if (!total) return undefined;
   const out = new Uint8Array(total);
   let offset = 0;
   for (const p of parts) {
     out.set(p, offset);
     offset += p.length;
   }
+  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+}
+
+function takeEncoded(s: Session): ArrayBuffer | undefined {
+  if (!s.parts.length) return undefined;
+  const buffer = concatParts(s.parts);
+  s.parts = [];
+  return buffer;
+}
+
+function assemble(parts: Int8Array[]): ArrayBuffer {
+  const buffer = concatParts(parts);
+  if (!buffer || buffer.byteLength < 32) throw new Error("MP3 输出过小，可能编码失败");
+  const out = new Uint8Array(buffer);
   if ((out[0] & 0xff) !== 0xff || (out[1] & 0xe0) !== 0xe0) {
     if (out[0] === 0 && out[1] === 0) throw new Error("MP3 文件头无效");
   }
-  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+  return buffer;
 }
 
 function fail(requestId: string, stage: string, error: unknown) {
@@ -134,12 +148,14 @@ self.onmessage = (ev: MessageEvent<InMsg>) => {
       if (!s) throw new Error("编码器未启动");
       stage = "encode_blocks";
       encodeAll(s.encoder, s.channels, msg.left, msg.right, s.parts);
-      (self as DedicatedWorkerGlobalScope).postMessage({
+      const mp3Slice = takeEncoded(s);
+      const reply: Record<string, unknown> = {
         requestId,
         ok: true,
-        stage: "pcm_encoded",
-        frames: s.parts.length
-      });
+        stage: "pcm_encoded"
+      };
+      if (mp3Slice) reply.mp3Slice = mp3Slice;
+      (self as DedicatedWorkerGlobalScope).postMessage(reply, mp3Slice ? [mp3Slice] : []);
       return;
     }
 
@@ -150,11 +166,13 @@ self.onmessage = (ev: MessageEvent<InMsg>) => {
       const end = s.encoder.flush();
       if (end.length) s.parts.push(end);
       stage = "assemble_blob";
-      const buffer = assemble(s.parts);
+      const buffer = takeEncoded(s);
       sessions.delete(requestId);
+      const transfer: Transferable[] = [];
+      if (buffer) transfer.push(buffer);
       (self as DedicatedWorkerGlobalScope).postMessage(
         { requestId, ok: true, mp3: buffer, kbps: s.kbps, channels: s.channels },
-        [buffer]
+        transfer
       );
       return;
     }

@@ -1,6 +1,7 @@
 import { buildOriginalFileName, buildRecoveryZipName, formatStamp, sanitizeFileBase } from "../filename";
 import { storage } from "../storage-manager";
 import { type Chunk, type Part, type Session } from "../types";
+import { finalizeWebmDurationBlob } from "../webm-duration";
 import { buildStoreZip } from "../zip-store";
 
 const pendingOriginal = new Map<string, Promise<OriginalDownloadResult>>();
@@ -23,10 +24,15 @@ async function partsForSession(sessionId: string): Promise<Part[]> {
   return deviceParts.length ? deviceParts : parts;
 }
 
+async function chunksForPart(partId: string): Promise<Chunk[]> {
+  return (await storage.byIndex<Chunk>("chunks", "partId", partId)).sort((a, b) => a.index - b.index);
+}
+
 async function assemblePartWebm(
-  part: Part
+  part: Part,
+  durationHintMs = 0
 ): Promise<{ blob: Blob; mimeType: string; chunkCount: number; size: number; missingIndex: boolean } | null> {
-  const chunks = (await storage.byIndex<Chunk>("chunks", "partId", part.id)).sort((a, b) => a.index - b.index);
+  const chunks = await chunksForPart(part.id);
   if (!chunks.length) return null;
   let missingIndex = false;
   for (let i = 0; i < chunks.length; i++) {
@@ -36,13 +42,19 @@ async function assemblePartWebm(
     }
   }
   const blobs = chunks.map((c) => c.blob);
-  const size = chunks.reduce((n, c) => n + c.size, 0);
+  const rawSize = chunks.reduce((n, c) => n + c.size, 0);
   const mimeType = part.mimeType || chunks[0]!.mimeType || "audio/webm";
+  const raw = new Blob(blobs, { type: mimeType });
+  const durationMs =
+    durationHintMs ||
+    (part.endedAt && part.startedAt ? part.endedAt - part.startedAt : 0) ||
+    chunks.reduce((n, c) => n + (c.durationMs || 0), 0);
+  const blob = /webm/i.test(mimeType) ? await finalizeWebmDurationBlob(raw, durationMs) : raw;
   return {
-    blob: new Blob(blobs, { type: mimeType }),
+    blob,
     mimeType,
     chunkCount: chunks.length,
-    size,
+    size: blob.size || rawSize,
     missingIndex
   };
 }
@@ -95,7 +107,10 @@ function anchorDownload(url: string, filename: string) {
   a.remove();
 }
 
-export async function prepareOriginalExport(sessionId: string): Promise<{
+export async function prepareOriginalExport(
+  sessionId: string,
+  durationHintMs = 0
+): Promise<{
   parts: Part[];
   assembled: Array<{ part: Part; blob: Blob; mimeType: string; ok: boolean; error?: string }>;
 }> {
@@ -103,7 +118,7 @@ export async function prepareOriginalExport(sessionId: string): Promise<{
   const assembled: Array<{ part: Part; blob: Blob; mimeType: string; ok: boolean; error?: string }> = [];
   for (const part of parts) {
     try {
-      const one = await assemblePartWebm(part);
+      const one = await assemblePartWebm(part, durationHintMs);
       if (!one || one.size <= 0) {
         assembled.push({ part, blob: new Blob(), mimeType: part.mimeType, ok: false, error: "empty" });
         continue;
@@ -136,7 +151,10 @@ export async function downloadOriginalRecording(
       return { ok: false, kind: "none", partCount: 0, error: { code: "NOT_FOUND", message: "找不到录音" } };
     }
 
-    const { assembled } = await prepareOriginalExport(sessionId);
+    const { assembled } = await prepareOriginalExport(
+      sessionId,
+      session.durationMs || session.safeDurationMs || 0
+    );
     const usable = assembled.filter((a) => a.ok && a.blob.size > 0);
     if (!usable.length) {
       session.originalStatus = "missing";
@@ -157,7 +175,7 @@ export async function downloadOriginalRecording(
       if (usable.length === 1) {
         const one = usable[0]!;
         const ext = extFromMime(one.mimeType);
-        const filename = buildOriginalFileName(display, startedAt, ext);
+        const filename = buildOriginalFileName(display, ext);
         const url = URL.createObjectURL(one.blob);
         try {
           let downloadId: number | undefined;
@@ -213,7 +231,7 @@ export async function downloadOriginalRecording(
       }
 
       const zipBlob = buildStoreZip(zipEntries);
-      const filename = buildRecoveryZipName(display, startedAt);
+      const filename = buildRecoveryZipName(display);
       const url = URL.createObjectURL(zipBlob);
       try {
         let downloadId: number | undefined;
@@ -253,4 +271,4 @@ export async function downloadOriginalRecording(
   return task;
 }
 
-export { assemblePartWebm, partsForSession, formatStamp, sanitizeFileBase };
+export { assemblePartWebm, chunksForPart, partsForSession, formatStamp, sanitizeFileBase };
