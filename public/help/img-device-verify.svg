@@ -1,13 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 260" role="img" aria-label="设备核对示意">
-  <rect width="640" height="260" fill="#f8fafc"/>
-  <rect x="20" y="16" width="600" height="228" rx="12" fill="#fff" stroke="#e2e8f0"/>
-  <text x="36" y="42" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#0f172a">设备核对</text>
-  <text x="560" y="42" text-anchor="end" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#1769aa">重新核对</text>
-  <text x="36" y="72" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#64748b">插件当前选择</text>
-  <text x="160" y="72" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#0f172a">Voicemeeter Out B1</text>
-  <text x="36" y="98" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#64748b">浏览器默认输入</text>
-  <text x="160" y="98" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#0f172a">Voicemeeter Out B1</text>
-  <rect x="36" y="166" width="568" height="58" rx="8" fill="#f0fdfa" stroke="#99f6e4"/>
-  <text x="48" y="188" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#0f766e">一致</text>
-  <text x="48" y="208" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#0f766e">插件选择与浏览器默认输入相同，立体声路由应能对应。</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-label="设备核对示意">
+  <rect width="640" height="220" fill="#eef3f8"/>
+  <rect x="20" y="16" width="600" height="188" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="36" y="40" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#152033" text-anchor="start">设备核对</text>
+  <text x="596" y="40" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#1769aa" text-anchor="end">重新核对</text>
+  <text x="36" y="64" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="start">插件当前选择</text>
+  <text x="152" y="64" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#152033" text-anchor="start">Voicemeeter Out B1（VoiceMeeter）</text>
+  <text x="36" y="84" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="start">浏览器默认输入</text>
+  <text x="152" y="84" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#152033" text-anchor="start">Voicemeeter Out B1（VoiceMeeter）</text>
+  <text x="36" y="104" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="start">声道</text>
+  <text x="152" y="104" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#152033" text-anchor="start">2 声道</text>
+  <text x="36" y="124" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="start">立体声</text>
+  <text x="152" y="124" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#0f766e" text-anchor="start">立体声 L/R 正常</text>
+  <rect x="36" y="144" width="568" height="44" rx="8" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1"/>
+  <text x="48" y="162" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#0f766e" text-anchor="start">一致</text>
+  <text x="48" y="178" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" font-weight="600" fill="#0f766e" text-anchor="start">插件选择与浏览器默认输入相同，立体声路由应能对应。</text>
 </svg>

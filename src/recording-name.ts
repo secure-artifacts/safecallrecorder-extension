@@ -7,6 +7,8 @@ export type RecordingNameItem = {
   text?: string;
   numberSeed?: number;
   numberSeedDate?: string;
+  /** When set (e.g. 8), daily increment wraps: 8 → next day → 1. Omit/0 = no limit. */
+  numberCycleMax?: number;
 };
 
 export type RecordingNameConfig = {
@@ -41,6 +43,8 @@ export function createRecordingNameItem(
     const seed = extras.numberSeed;
     item.numberSeed = Number.isFinite(seed) ? Math.max(0, Math.floor(seed!)) : 1;
     if (extras.numberSeedDate) item.numberSeedDate = extras.numberSeedDate;
+    const cycle = normalizeNumberCycleMax(extras.numberCycleMax);
+    if (cycle != null) item.numberCycleMax = cycle;
   }
   return item;
 }
@@ -128,7 +132,8 @@ function migrateLegacyItems(src: Partial<RecordingNameConfig>): RecordingNameIte
         createRecordingNameItem("number", {
           id: "legacy-number",
           numberSeed: src.numberSeed,
-          numberSeedDate: src.numberSeedDate
+          numberSeedDate: src.numberSeedDate,
+          numberCycleMax: (src as { numberCycleMax?: number }).numberCycleMax
         })
       );
     }
@@ -166,10 +171,23 @@ export function normalizeRecordingNameConfig(
   };
 }
 
+export function normalizeNumberCycleMax(value: unknown): number | null {
+  if (value == null || value === "" || value === 0) return null;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 1) return null;
+  return Math.min(n, 999999);
+}
+
 export function resolveItemNumber(item: RecordingNameItem, now = new Date()): number {
   const seed = Number.isFinite(item.numberSeed) ? Math.max(0, Math.floor(item.numberSeed!)) : 1;
-  if (!item.numberSeedDate) return seed;
-  return seed + Math.max(0, daysBetweenLocal(item.numberSeedDate, formatDateOnly(now)));
+  let raw = seed;
+  if (item.numberSeedDate) {
+    raw = seed + Math.max(0, daysBetweenLocal(item.numberSeedDate, formatDateOnly(now)));
+  }
+  const cycleMax = normalizeNumberCycleMax(item.numberCycleMax);
+  if (cycleMax == null) return raw;
+  const normalized = raw < 1 ? 1 : raw;
+  return ((normalized - 1) % cycleMax) + 1;
 }
 
 /** Today's number: seed on seedDate, +1 for each full calendar day after. Uses the first number item. */

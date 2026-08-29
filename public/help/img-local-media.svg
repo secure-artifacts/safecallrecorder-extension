@@ -1,15 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 300" role="img" aria-label="本地媒体播放示意">
-  <rect width="640" height="300" fill="#f8fafc"/>
-  <rect x="20" y="16" width="600" height="268" rx="12" fill="#fff" stroke="#e2e8f0"/>
-  <text x="36" y="42" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#0f172a">本地媒体播放</text>
-  <text x="500" y="42" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#64748b">播完后自动开始录音</text>
-  <rect x="36" y="56" width="96" height="26" rx="7" fill="#fff" stroke="#cbd5e1"/>
-  <text x="84" y="73" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#334155">选择本地文件</text>
-  <rect x="140" y="56" width="48" height="26" rx="7" fill="#0f766e"/>
-  <text x="164" y="73" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#fff">播放</text>
-  <text x="36" y="102" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#334155">lecture.mp4</text>
-  <rect x="36" y="112" width="568" height="120" rx="10" fill="#000"/>
-  <polygon points="300,152 300,192 340,172" fill="#fff" opacity="0.9"/>
-  <rect x="36" y="244" width="568" height="24" rx="6" fill="#f0fdfa" stroke="#99f6e4"/>
-  <text x="48" y="260" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#0f766e">正在播放，结束后将自动开始录音。</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" role="img" aria-label="本地媒体播放示意">
+  <rect width="640" height="200" fill="#eef3f8"/>
+  <rect x="20" y="16" width="600" height="168" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="36" y="40" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#152033" text-anchor="start">本地媒体播放</text>
+  <text x="468" y="40" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748b" text-anchor="start">播完后自动开始录音</text>
+  <rect x="36" y="50" width="96" height="28" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="84" y="68" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#334155" text-anchor="middle">选择本地文件</text>
+  <rect x="140" y="50" width="48" height="28" rx="8" fill="#0f766e" stroke="#0f766e" stroke-width="1"/>
+  <text x="164" y="68" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">播放</text>
+  <text x="36" y="94" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="600" fill="#334155" text-anchor="start">lecture.mp4</text>
+  <rect x="36" y="104" width="568" height="44" rx="10" fill="#000" stroke="none" stroke-width="1"/>
+  <polygon points="300,118 300,134 316,126" fill="#fff" opacity="0.9"/>
+  <text x="36" y="164" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" font-weight="600" fill="#64748b" text-anchor="start">选择 mp4、mp3 等本地文件并播放；播放结束后将自动开始录音（需在设置中开启）。</text>
 </svg>

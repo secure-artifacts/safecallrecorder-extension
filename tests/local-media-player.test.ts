@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  addFilesToPlaylist,
   detectLocalMediaKind,
   formatPlaybackTime,
-  isLocalMediaEndedAutoStartEnabled
+  isLocalMediaEndedAutoStartEnabled,
+  movePlaylistItem,
+  reorderPlaylistItemTo,
+  playlistPlayingStatus,
+  playlistReadyStatus,
+  playlistSummary,
+  removePlaylistItem
 } from "../src/local-media-player";
 import { DEFAULT_SETTINGS } from "../src/types";
 import { readFileSync } from "node:fs";
@@ -28,15 +35,52 @@ describe("local media player", () => {
     expect(isLocalMediaEndedAutoStartEnabled({ autoStartOnLocalMediaEnded: false })).toBe(false);
   });
 
-  it("dashboard exposes local media player UI and ended auto-start", () => {
+  it("builds and edits playlists", () => {
+    const a = new File([], "a.mp3", { type: "audio/mpeg" });
+    const b = new File([], "b.mp4", { type: "video/mp4" });
+    const bad = new File([], "c.txt", { type: "text/plain" });
+    const first = addFilesToPlaylist([], [a, bad]);
+    expect(first.added).toBe(1);
+    expect(first.skipped).toEqual(["c.txt"]);
+    expect(first.playlist).toHaveLength(1);
+
+    const second = addFilesToPlaylist(first.playlist, [b]);
+    expect(second.playlist).toHaveLength(2);
+    const id = second.playlist[0]!.id;
+    const moved = movePlaylistItem(second.playlist, id, 1);
+    expect(moved[1]!.id).toBe(id);
+    expect(reorderPlaylistItemTo(moved, moved[0]!.id, id).map((item) => item.id)).toEqual([
+      moved[1]!.id,
+      moved[0]!.id
+    ]);
+    expect(removePlaylistItem(moved, id)).toHaveLength(1);
+  });
+
+  it("describes playlist status for sequential playback", () => {
+    expect(playlistSummary(0)).toBe("播放列表为空");
+    expect(playlistSummary(2)).toBe("共 2 个文件");
+    expect(playlistReadyStatus(3, true)).toContain("全部结束后");
+    expect(playlistPlayingStatus(1, 4, "part.mp4", true)).toContain("2/4");
+    expect(playlistPlayingStatus(1, 4, "part.mp4", true)).toContain("全部播完后");
+  });
+
+  it("dashboard exposes local media playlist UI and ended auto-start", () => {
     const html = readFileSync(new URL("../public/dashboard.html", import.meta.url), "utf8");
     const dash = readFileSync(new URL("../src/dashboard.ts", import.meta.url), "utf8");
     expect(html).toContain('id="localMediaCard"');
     expect(html).toContain('id="localMediaFile"');
-    expect(html).toContain('id="autoStartOnLocalMediaEnded"');
+    expect(html).toContain('id="localMediaPlaylist"');
+    expect(html).toContain('id="localMediaClearPlaylistBtn"');
+    expect(html).toContain("multiple");
+    expect(html).toContain("download-folder-card");
+    expect(html).toContain('id="pickDownloadFolder"');
+    expect(html).toContain('id="useDownloadFolderBtn"');
+    expect(html).toContain('id="downloadFolder"');
     expect(dash).toContain("local_media_ended");
-    expect(dash).not.toContain('tryAutoStartRecording("local_media_ended",');
-    expect(dash).toContain("localMediaPlaybackActive");
+    expect(dash).toContain("playLocalMediaPlaylist");
+    expect(dash).toContain("localMediaDragId");
+    expect(dash).toContain("ensurePreviewMonitor");
+    expect(dash).toContain("reorderLocalMediaPlaylistItem");
     expect(DEFAULT_SETTINGS.autoStartOnLocalMediaEnded).toBe(true);
   });
 });

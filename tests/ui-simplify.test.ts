@@ -25,6 +25,12 @@ describe("ui simplification contract", () => {
     expect(html).toContain('id="recNameDateYmd"');
     expect(html).toContain("录音历史");
     expect(html).toContain('id="clearHistory"');
+    expect(html).toContain('id="exportHistory"');
+    expect(html).toContain('id="importHistory"');
+    expect(html).toContain('id="importHistoryFile"');
+    expect(html).toContain('class="history-toolbar"');
+    expect(html).toContain("导出备份");
+    expect(html).toContain("导入备份");
     expect(html).toContain("清空历史");
     expect(html).toContain('id="confirmModal"');
     const live = html.indexOf('id="liveMonitor"');

@@ -1,5 +1,8 @@
 import { build } from "esbuild";
 import { cp, mkdir, rm, copyFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+
+spawnSync(process.execPath, ["scripts/write-help-svgs.mjs"], { stdio: "inherit" });
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });

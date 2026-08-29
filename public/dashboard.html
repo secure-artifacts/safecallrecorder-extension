@@ -18,7 +18,7 @@
       </div>
       <div class="top-actions">
         <button type="button" id="helpBtn" class="btn help-entry" title="使用说明">？ 使用说明</button>
-        <button type="button" id="settingsBtn" class="icon-btn" title="设置" aria-label="设置">⚙</button>
+        <button type="button" id="settingsBtn" class="btn outline small settings-entry" title="更多设置" aria-label="更多设置">⚙ 设置</button>
       </div>
     </header>
 
@@ -60,11 +60,10 @@
       <p class="hint">标准适合普通通话：短暂停顿不会立刻显示“没有声音”。</p>
       <label class="row"><span>检测到声音后自动开始录音</span><input type="checkbox" id="autoStartRecording"></label>
       <label class="row"><span>浏览器标签页播放本地媒体时自动开始</span><input type="checkbox" id="autoStartOnLocalMediaTab"></label>
-      <label class="row"><span>插件内播放结束后自动开始</span><input type="checkbox" id="autoStartOnLocalMediaEnded"></label>
-      <p class="hint">「标签页」：在浏览器中打开 mp3/mp4 并开始播放时自动录音。「插件内」：在下方播放器播完后再自动开始，播放过程中不会提前录音。</p>
+      <label class="row"><span>插件内播放列表结束后自动开始</span><input type="checkbox" id="autoStartOnLocalMediaEnded"></label>
+      <p class="hint">「标签页」：在浏览器中打开 mp3/mp4 并开始播放时自动录音。「插件内」：下方播放列表按顺序全部播完后再自动开始，播放过程中不会提前录音。</p>
       <p class="hint">请确保所选设备能收到播放声音（例如 VoiceMeeter Out B1）。</p>
       <button type="button" id="showOnboardingAgain" class="btn outline small">重新显示新手引导</button>
-      <p class="hint">下载文件通常在浏览器的“下载”文件夹。请在浏览器下载设置中查看。</p>
       <p class="hint">隐私：录音只保存在本机浏览器存储中，不会上传。</p>
       <button type="button" id="clearAll" class="btn danger outline">清理所有历史录音</button>
     </div>
@@ -147,22 +146,24 @@
       <section id="localMediaCard" class="local-media-card">
         <div class="local-media-head">
           <strong>本地媒体播放</strong>
-          <span class="local-media-sub">播完后自动开始录音</span>
+          <span class="local-media-sub">播放列表全部结束后自动开始录音</span>
         </div>
         <div class="local-media-controls">
           <label class="btn outline small local-media-pick">
-            选择本地文件
-            <input type="file" id="localMediaFile" class="local-media-file-input" accept="video/*,audio/*,.mp4,.webm,.mkv,.mov,.avi,.mp3,.wav,.m4a,.ogg,.opus,.aac,.flac">
+            添加文件
+            <input type="file" id="localMediaFile" class="local-media-file-input" multiple accept="video/*,audio/*,.mp4,.webm,.mkv,.mov,.avi,.mp3,.wav,.m4a,.ogg,.opus,.aac,.flac">
           </label>
-          <button type="button" id="localMediaPlayBtn" class="btn secondary small" disabled>播放</button>
+          <button type="button" id="localMediaClearPlaylistBtn" class="btn outline small" disabled>清空列表</button>
+          <button type="button" id="localMediaPlayBtn" class="btn secondary small" disabled>播放列表</button>
           <button type="button" id="localMediaStopBtn" class="btn outline small hidden" disabled>停止</button>
         </div>
-        <p id="localMediaFileName" class="local-media-file-name">未选择文件</p>
+        <p id="localMediaFileName" class="local-media-file-name">播放列表为空</p>
+        <ol id="localMediaPlaylist" class="local-media-playlist hidden" aria-label="本地媒体播放列表"></ol>
         <div id="localMediaPlayerWrap" class="local-media-player-wrap hidden">
           <video id="localMediaVideo" controls playsinline class="local-media-video hidden"></video>
           <audio id="localMediaAudio" controls class="local-media-audio hidden"></audio>
         </div>
-        <p id="localMediaStatus" class="hint local-media-status">选择 mp4、mp3 等本地文件并播放；播放结束后将自动开始录音（需在设置中开启）。</p>
+        <p id="localMediaStatus" class="hint local-media-status">添加 mp4、mp3 等文件到播放列表；双击条目可从此处开始播放，全部播完后将自动开始录音（需在设置中开启）。</p>
       </section>
 
       <div id="liveMonitor" class="live-monitor" aria-live="polite"></div>
@@ -201,9 +202,27 @@
       <p id="lowQualityNote" class="low-quality-note hidden">当前使用最低音质录音。</p>
     </section>
 
+    <section class="card download-folder-card">
+      <h2>下载保存路径</h2>
+      <div class="download-folder-actions">
+        <button type="button" id="useDownloadFolderBtn" class="btn secondary small">使用下载文件夹</button>
+        <button type="button" id="pickDownloadFolder" class="btn outline small">选择其他位置…</button>
+      </div>
+      <p id="downloadFolderLabel" class="download-folder-label">当前：浏览器下载文件夹 /</p>
+      <label class="download-folder-row">
+        <span>子文件夹（可选）</span>
+        <input type="text" id="downloadFolder" class="download-folder-input" placeholder="留空则直接保存到下载文件夹" autocomplete="off">
+      </label>
+      <p id="downloadFolderHint" class="hint">保存到「下载」文件夹时，请保持上方默认设置，不要点「选择其他位置」。Chrome 不允许把「下载」根目录作为自定义文件夹。</p>
+      <p class="hint">只有想保存到 D 盘等其他位置时，才需要点「选择其他位置…」并在其中新建子文件夹（例如 D:\录音）。</p>
+    </section>
+
     <section class="card history-card">
-      <div class="history-head">
-        <h2>录音历史</h2>
+      <h2>录音历史</h2>
+      <div class="history-toolbar">
+        <button type="button" id="exportHistory" class="btn outline small" disabled>导出备份</button>
+        <button type="button" id="importHistory" class="btn outline small">导入备份</button>
+        <input type="file" id="importHistoryFile" accept=".zip,application/zip,.scr.zip" hidden />
         <button type="button" id="clearHistory" class="btn danger outline small" disabled>清空历史</button>
       </div>
       <div id="history" class="history"></div>

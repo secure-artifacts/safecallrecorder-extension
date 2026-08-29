@@ -55,7 +55,12 @@ describe("help system", () => {
     expect(html).toContain("已安全保存");
     expect(html).toContain("录音名称怎么拼");
     expect(html).toContain("不会自动加横线");
-    expect(html).toContain("按任意音质重新导出");
+    expect(html).toContain("一轮最大值");
+    expect(html).toContain("img-rec-name.svg");
+    expect(html).toContain("使用下载文件夹");
+    expect(html).toContain("导出备份");
+    expect(html).toContain("导入备份");
+    expect(html).toContain("播放列表");
     expect(html).toContain("导出MP3");
     expect(html).toContain("help.css");
     expect(html).not.toContain("http://");
@@ -63,6 +68,7 @@ describe("help system", () => {
 
     for (const img of [
       "img-dashboard.svg",
+      "img-rec-name.svg",
       "img-device-verify.svg",
       "img-local-media.svg",
       "img-auto-start.svg",
@@ -86,7 +92,7 @@ describe("help system", () => {
   });
 
   it("exports help content version", () => {
-    expect(HELP_CONTENT_VERSION).toBe("1.2.0");
+    expect(HELP_CONTENT_VERSION).toBe("1.3.0");
   });
 
   it("manifest does not add network host permissions for help", () => {

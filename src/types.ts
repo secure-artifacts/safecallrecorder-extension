@@ -152,6 +152,10 @@ export interface AppSettings {
   autoStartOnLocalMediaTab?: boolean;
   /** Auto start when in-dashboard local media player reaches end. */
   autoStartOnLocalMediaEnded?: boolean;
+  /** Subfolder under the chosen or default download directory, e.g. SafeCallRecorder/会议 */
+  downloadFolder?: string;
+  /** Display name of the user-picked download directory (handle stored in IndexedDB). */
+  customDownloadDirectoryName?: string;
   /** Recording name builder (date / daily number / custom). */
   recordingName?: Partial<RecordingNameConfig>;
 }
@@ -168,7 +172,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoStartRecording: false,
   autoStartOnSound: true,
   autoStartOnLocalMediaTab: true,
-  autoStartOnLocalMediaEnded: true
+  autoStartOnLocalMediaEnded: true,
+  downloadFolder: ""
 };
 
 export const id = () => crypto.randomUUID();

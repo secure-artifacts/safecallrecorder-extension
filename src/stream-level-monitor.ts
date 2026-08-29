@@ -96,7 +96,9 @@ export class StreamLevelMonitor {
     try {
       this.detector.reset();
       this.lastUiEmit = 0;
+      this.disconnected = false;
       this.ctx = new AudioContext();
+      void this.ctx.resume();
       this.source = this.ctx.createMediaStreamSource(this.stream);
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = AudioLevelConfig.fftSize;
@@ -118,7 +120,17 @@ export class StreamLevelMonitor {
     }
   }
 
+  resumeIfNeeded() {
+    const track = this.stream.getAudioTracks()[0];
+    if (track?.readyState === "live" && this.disconnected) {
+      this.disconnected = false;
+      this.detector.reset();
+    }
+    if (this.ctx?.state === "suspended") void this.ctx.resume();
+  }
+
   private tick() {
+    if (this.ctx?.state === "suspended") void this.ctx.resume();
     if (!this.analyser || !this.timeDomain || !this.freqDomain) {
       this.emitSnapshot(false);
       return;

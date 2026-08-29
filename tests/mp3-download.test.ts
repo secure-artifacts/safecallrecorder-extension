@@ -146,7 +146,7 @@ describe("mp3 download service", () => {
     expect(download).toHaveBeenCalledTimes(1);
     const arg = download.mock.calls[0]?.[0] as chrome.downloads.DownloadOptions;
     expect(arg).toMatchObject({
-      filename: "SafeCallRecorder/test.mp3",
+      filename: "test.mp3",
       conflictAction: "uniquify",
       saveAs: false
     });

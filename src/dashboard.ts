@@ -39,11 +39,31 @@ import {
   type RecordingNamePart
 } from "./recording-name";
 import {
-  detectLocalMediaKind,
   isLocalMediaEndedAutoStartEnabled,
-  type LocalMediaKind
+  addFilesToPlaylist,
+  movePlaylistItem,
+  reorderPlaylistItemTo,
+  removePlaylistItem,
+  playlistPlayingStatus,
+  playlistReadyStatus,
+  playlistSummary,
+  type LocalMediaPlaylistItem
 } from "./local-media-player";
 import { finalizeWebmDurationBlob } from "./webm-duration";
+import {
+  buildHistoryBackupFileName,
+  exportHistoryBackup,
+  importHistoryBackup
+} from "./history-backup";
+import { downloadFolderHint, friendlyProtectedFolderPickError, isProtectedFolderPickError } from "./download-path";
+import {
+  clearSavedDownloadDirectory,
+  describeDownloadDirectory,
+  getSavedDownloadDirectory,
+  pickDownloadDirectory,
+  supportsDirectoryPicker
+} from "./download-directory";
+import { saveDownloadBlob } from "./download-save";
 import { deviceHint } from "./device-manager";
 import {
   compareSelectedWithBrowser,
@@ -80,6 +100,8 @@ let historyActiveIds: string[] = [];
 /** Bumped to discard in-flight GetState / reload results after delete/clear. */
 let historyRequestVersion = 0;
 let clearingHistory = false;
+let exportingHistory = false;
+let importingHistory = false;
 let deletingSessionIds = new Set<string>();
 let playingAudio: { sessionId: string; audio: HTMLAudioElement; url: string } | undefined;
 /** Remembers the export-bitrate dropdown choice across history refreshes. */
@@ -102,7 +124,38 @@ let cachedBrowserDefault: InputDeviceInfo | null = null;
 let verifyInFlight = false;
 let lastStereoProbeAt = 0;
 let localMediaPlaybackActive = false;
-let localMediaLoaded: { file: File; objectUrl: string; kind: LocalMediaKind } | undefined;
+let localMediaSequentialPlay = false;
+let localMediaPlaylist: LocalMediaPlaylistItem[] = [];
+let localMediaPlaylistIndex = -1;
+let localMediaLoaded: { item: LocalMediaPlaylistItem; objectUrl: string } | undefined;
+let localMediaDragId: string | null = null;
+let localMediaPreviewKeepalive: ReturnType<typeof setInterval> | undefined;
+
+function startLocalMediaPreviewKeepalive() {
+  stopLocalMediaPreviewKeepalive();
+  localMediaPreviewKeepalive = setInterval(() => {
+    if (!localMediaPlaybackActive || recording || busy) return;
+    void ensurePreviewMonitor();
+  }, 1000);
+}
+
+function stopLocalMediaPreviewKeepalive() {
+  if (localMediaPreviewKeepalive) clearInterval(localMediaPreviewKeepalive);
+  localMediaPreviewKeepalive = undefined;
+}
+
+async function ensurePreviewMonitor() {
+  if (recording || busy) return;
+  if (!preview) {
+    await startPreview();
+    return;
+  }
+  preview.monitor.resumeIfNeeded();
+  const track = preview.stream.getAudioTracks()[0];
+  if (!track || track.readyState === "ended") {
+    await startPreview();
+  }
+}
 
 function renderDeviceVerificationUi(
   selected: InputDeviceInfo | null,
@@ -203,13 +256,87 @@ async function maybeProbeStereoFromPreview() {
 function updateLocalMediaUi() {
   const playBtn = $<HTMLButtonElement>("localMediaPlayBtn");
   const stopBtn = $<HTMLButtonElement>("localMediaStopBtn");
-  const blocked = recording || busy || !localMediaLoaded;
+  const clearBtn = $<HTMLButtonElement>("localMediaClearPlaylistBtn");
+  const hasPlaylist = localMediaPlaylist.length > 0;
+  const blocked = recording || busy || !hasPlaylist;
   playBtn.disabled = blocked || localMediaPlaybackActive;
-  stopBtn.disabled = recording || busy || !localMediaLoaded;
-  stopBtn.classList.toggle("hidden", !localMediaLoaded);
+  stopBtn.disabled = recording || busy || !hasPlaylist;
+  stopBtn.classList.toggle("hidden", !hasPlaylist);
+  clearBtn.disabled = recording || busy || !hasPlaylist || localMediaPlaybackActive;
 }
 
-function clearLocalMedia() {
+function renderLocalMediaPlaylist() {
+  const host = $<HTMLOListElement>("localMediaPlaylist");
+  host.replaceChildren();
+  host.classList.toggle("hidden", localMediaPlaylist.length === 0);
+  $("localMediaFileName").textContent = playlistSummary(localMediaPlaylist.length);
+
+  localMediaPlaylist.forEach((item, index) => {
+    const li = document.createElement("li");
+    li.className = "local-media-playlist-item";
+    li.dataset.id = item.id;
+    const canReorder = !localMediaPlaybackActive && !recording && !busy;
+    li.draggable = canReorder;
+    if (index === localMediaPlaylistIndex && localMediaPlaylistIndex >= 0) {
+      li.classList.add("active");
+    }
+
+    const grip = document.createElement("span");
+    grip.className = "local-media-playlist-grip";
+    grip.title = "拖动调整顺序";
+    grip.setAttribute("aria-hidden", "true");
+    grip.textContent = "⠿";
+
+    const indexEl = document.createElement("span");
+    indexEl.className = "local-media-playlist-index";
+    indexEl.textContent = String(index + 1);
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "local-media-playlist-name";
+    nameEl.textContent = item.file.name;
+    nameEl.title = "双击从此处开始播放";
+
+    const actions = document.createElement("div");
+    actions.className = "local-media-playlist-actions";
+
+    const up = document.createElement("button");
+    up.type = "button";
+    up.className = "btn outline small icon";
+    up.title = "上移";
+    up.textContent = "↑";
+    up.disabled = index === 0 || localMediaPlaybackActive || recording || busy;
+    up.onclick = () => reorderLocalMediaPlaylistItem(item.id, -1);
+
+    const down = document.createElement("button");
+    down.type = "button";
+    down.className = "btn outline small icon";
+    down.title = "下移";
+    down.textContent = "↓";
+    down.disabled =
+      index === localMediaPlaylist.length - 1 || localMediaPlaybackActive || recording || busy;
+    down.onclick = () => reorderLocalMediaPlaylistItem(item.id, 1);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn outline small icon";
+    remove.title = "移除";
+    remove.textContent = "×";
+    remove.disabled = localMediaPlaybackActive || recording || busy;
+    remove.onclick = () => removeLocalMediaPlaylistItem(item.id);
+
+    actions.append(up, down, remove);
+    li.append(grip, indexEl, nameEl, actions);
+    li.title = "双击从此处开始播放";
+    li.ondblclick = (e) => {
+      if ((e.target as HTMLElement).closest(".local-media-playlist-actions")) return;
+      if (recording || busy) return;
+      void playLocalMediaPlaylistFromIndex(index);
+    };
+    host.append(li);
+  });
+}
+
+function unloadCurrentLocalMediaTrack() {
   const video = $<HTMLVideoElement>("localMediaVideo");
   const audio = $<HTMLAudioElement>("localMediaAudio");
   video.pause();
@@ -231,25 +358,101 @@ function clearLocalMedia() {
     }
   }
   localMediaLoaded = undefined;
-  localMediaPlaybackActive = false;
+}
+
+function clearLocalMediaPlaylist() {
+  stopLocalMediaPlayback();
+  unloadCurrentLocalMediaTrack();
+  localMediaPlaylist = [];
+  localMediaPlaylistIndex = -1;
+  localMediaSequentialPlay = false;
+  stopLocalMediaPreviewKeepalive();
+  renderLocalMediaPlaylist();
+  $("localMediaStatus").classList.remove("playing");
+  $("localMediaStatus").textContent = playlistReadyStatus(0, isLocalMediaEndedAutoStartEnabled(settings));
   updateLocalMediaUi();
+}
+
+function moveLocalMediaPlaylistItem(fromId: string, toId: string) {
+  if (localMediaPlaybackActive || fromId === toId) return;
+  const loadedId = localMediaLoaded?.item.id;
+  localMediaPlaylist = reorderPlaylistItemTo(localMediaPlaylist, fromId, toId);
+  if (loadedId) {
+    localMediaPlaylistIndex = localMediaPlaylist.findIndex((item) => item.id === loadedId);
+  }
+  renderLocalMediaPlaylist();
+}
+
+function reorderLocalMediaPlaylistItem(id: string, delta: -1 | 1) {
+  if (localMediaPlaybackActive) return;
+  const prevIndex = localMediaPlaylist.findIndex((item) => item.id === id);
+  localMediaPlaylist = movePlaylistItem(localMediaPlaylist, id, delta);
+  const nextIndex = localMediaPlaylist.findIndex((item) => item.id === id);
+  if (localMediaLoaded && prevIndex === localMediaPlaylistIndex && nextIndex >= 0) {
+    localMediaPlaylistIndex = nextIndex;
+  }
+  renderLocalMediaPlaylist();
+}
+
+function removeLocalMediaPlaylistItem(id: string) {
+  if (localMediaPlaybackActive) return;
+  const removedIndex = localMediaPlaylist.findIndex((item) => item.id === id);
+  const removingLoaded = localMediaLoaded?.item.id === id;
+  localMediaPlaylist = removePlaylistItem(localMediaPlaylist, id);
+  if (removingLoaded) {
+    unloadCurrentLocalMediaTrack();
+    localMediaPlaylistIndex = -1;
+  } else if (removedIndex >= 0 && removedIndex < localMediaPlaylistIndex) {
+    localMediaPlaylistIndex -= 1;
+  }
+  renderLocalMediaPlaylist();
+  if (localMediaPlaylist.length === 0) {
+    $("localMediaStatus").textContent = playlistReadyStatus(0, isLocalMediaEndedAutoStartEnabled(settings));
+  }
+  updateLocalMediaUi();
+}
+
+function addLocalMediaFiles(files: FileList | File[]) {
+  const { playlist, added, skipped } = addFilesToPlaylist(localMediaPlaylist, [...files]);
+  localMediaPlaylist = playlist;
+  renderLocalMediaPlaylist();
+  updateLocalMediaUi();
+
+  const autoStart = isLocalMediaEndedAutoStartEnabled(settings);
+  if (added > 0) {
+    $("localMediaStatus").textContent = playlistReadyStatus(localMediaPlaylist.length, autoStart);
+  }
+  if (skipped.length > 0) {
+    const skipNote = skipped.length === 1 ? skipped[0] : `${skipped.length} 个文件`;
+    setStatus(`已跳过不支持的文件：${skipNote}`);
+  }
 }
 
 function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
   el.onplay = () => {
     localMediaPlaybackActive = true;
     previewHadSound = false;
+    void ensurePreviewMonitor();
+    startLocalMediaPreviewKeepalive();
     updateLocalMediaUi();
+    renderLocalMediaPlaylist();
     const statusEl = $("localMediaStatus");
-    statusEl.textContent = isLocalMediaEndedAutoStartEnabled(settings)
-      ? "正在播放… 结束后将自动开始录音。"
-      : "正在播放…";
+    const fileName = localMediaLoaded?.item.file.name || "";
+    statusEl.textContent = playlistPlayingStatus(
+      Math.max(localMediaPlaylistIndex, 0),
+      localMediaPlaylist.length,
+      fileName,
+      isLocalMediaEndedAutoStartEnabled(settings)
+    );
     statusEl.classList.add("playing");
   };
   el.onpause = () => {
     if (!el.ended) {
       localMediaPlaybackActive = false;
+      stopLocalMediaPreviewKeepalive();
+      void ensurePreviewMonitor();
       updateLocalMediaUi();
+      renderLocalMediaPlaylist();
       $("localMediaStatus").classList.remove("playing");
       $("localMediaStatus").textContent = "播放已暂停。";
     }
@@ -259,91 +462,145 @@ function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
   };
   el.onerror = () => {
     localMediaPlaybackActive = false;
+    localMediaSequentialPlay = false;
+    stopLocalMediaPreviewKeepalive();
+    void ensurePreviewMonitor();
     updateLocalMediaUi();
+    renderLocalMediaPlaylist();
     $("localMediaStatus").classList.remove("playing");
     $("localMediaStatus").textContent = "无法播放该文件，请换一个格式试试。";
   };
 }
 
-async function handleLocalMediaEnded() {
-  localMediaPlaybackActive = false;
-  updateLocalMediaUi();
-  const statusEl = $("localMediaStatus");
-  statusEl.classList.remove("playing");
-  if (!isLocalMediaEndedAutoStartEnabled(settings)) {
-    statusEl.textContent = "播放已结束。可在设置中开启「插件内播放结束后自动开始」。";
-    return;
-  }
-  statusEl.textContent = "播放已结束，正在自动开始录音…";
-  await tryAutoStartRecording("local_media_ended");
-}
+async function loadLocalMediaTrack(index: number) {
+  const item = localMediaPlaylist[index];
+  if (!item) return;
+  unloadCurrentLocalMediaTrack();
 
-async function loadLocalMediaFile(file: File) {
-  clearLocalMedia();
-  const kind = detectLocalMediaKind(file);
-  if (!kind) {
-    $("localMediaFileName").textContent = file.name;
-    $("localMediaStatus").textContent = "不支持的文件类型。请选择 mp4、webm、mp3、wav 等常见格式。";
-    return;
-  }
-  let playable: Blob = file;
-  if (/webm/i.test(file.type) || /\.webm$/i.test(file.name)) {
+  let playable: Blob = item.file;
+  if (/webm/i.test(item.file.type) || /\.webm$/i.test(item.file.name)) {
     try {
-      playable = await finalizeWebmDurationBlob(file, 0);
+      playable = await finalizeWebmDurationBlob(item.file, 0);
     } catch {
-      playable = file;
+      playable = item.file;
     }
   }
+
   const objectUrl = URL.createObjectURL(playable);
-  localMediaLoaded = { file, objectUrl, kind };
+  localMediaLoaded = { item, objectUrl };
+  localMediaPlaylistIndex = index;
+
   const video = $<HTMLVideoElement>("localMediaVideo");
   const audio = $<HTMLAudioElement>("localMediaAudio");
-  const target = kind === "video" ? video : audio;
-  const other = kind === "video" ? audio : video;
+  const target = item.kind === "video" ? video : audio;
+  const other = item.kind === "video" ? audio : video;
   other.classList.add("hidden");
   other.removeAttribute("src");
   target.classList.remove("hidden");
   target.src = objectUrl;
   bindLocalMediaElement(target);
   $("localMediaPlayerWrap").classList.remove("hidden");
-  $("localMediaFileName").textContent = file.name;
-  $("localMediaStatus").textContent = isLocalMediaEndedAutoStartEnabled(settings)
-    ? "已加载。点击「播放」，播完后将自动开始录音。"
-    : "已加载。点击「播放」开始；自动录音需在设置中开启。";
+  renderLocalMediaPlaylist();
   updateLocalMediaUi();
+  void ensurePreviewMonitor();
 }
 
-async function playLocalMedia() {
+async function playCurrentLocalMediaTrack() {
   if (!localMediaLoaded || recording || busy) return;
   const el =
-    localMediaLoaded.kind === "video"
+    localMediaLoaded.item.kind === "video"
       ? $<HTMLVideoElement>("localMediaVideo")
       : $<HTMLAudioElement>("localMediaAudio");
+  await el.play();
+}
+
+async function handleLocalMediaEnded() {
+  localMediaPlaybackActive = false;
+  stopLocalMediaPreviewKeepalive();
+  void ensurePreviewMonitor();
+  updateLocalMediaUi();
+  renderLocalMediaPlaylist();
+  const statusEl = $("localMediaStatus");
+  statusEl.classList.remove("playing");
+
+  if (
+    localMediaSequentialPlay &&
+    localMediaPlaylistIndex >= 0 &&
+    localMediaPlaylistIndex < localMediaPlaylist.length - 1
+  ) {
+    const nextIndex = localMediaPlaylistIndex + 1;
+    statusEl.textContent = `即将播放下一项（${nextIndex + 1}/${localMediaPlaylist.length}）…`;
+    try {
+      await loadLocalMediaTrack(nextIndex);
+      await playCurrentLocalMediaTrack();
+    } catch (e) {
+      localMediaSequentialPlay = false;
+      statusEl.textContent = friendlyError(e instanceof Error ? e.message : String(e));
+    }
+    return;
+  }
+
+  localMediaSequentialPlay = false;
+  if (!isLocalMediaEndedAutoStartEnabled(settings)) {
+    statusEl.textContent =
+      localMediaPlaylist.length > 1
+        ? "播放列表已结束。可在设置中开启「插件内播放结束后自动开始」。"
+        : "播放已结束。可在设置中开启「插件内播放结束后自动开始」。";
+    return;
+  }
+  statusEl.textContent =
+    localMediaPlaylist.length > 1 ? "播放列表已结束，正在自动开始录音…" : "播放已结束，正在自动开始录音…";
+  await tryAutoStartRecording("local_media_ended");
+}
+
+async function playLocalMediaPlaylistFromIndex(index: number) {
+  if (index < 0 || index >= localMediaPlaylist.length || recording || busy) return;
+  localMediaSequentialPlay = true;
   try {
-    await el.play();
+    const item = localMediaPlaylist[index]!;
+    if (!localMediaLoaded || localMediaPlaylistIndex !== index || localMediaLoaded.item.id !== item.id) {
+      await loadLocalMediaTrack(index);
+    }
+    await playCurrentLocalMediaTrack();
   } catch (e) {
+    localMediaSequentialPlay = false;
     localMediaPlaybackActive = false;
     updateLocalMediaUi();
+    renderLocalMediaPlaylist();
     $("localMediaStatus").textContent = friendlyError(e instanceof Error ? e.message : String(e));
   }
 }
 
+async function playLocalMediaPlaylist() {
+  if (localMediaPlaylist.length === 0 || recording || busy) return;
+  const startIndex =
+    localMediaLoaded && localMediaPlaylistIndex >= 0 && !localMediaPlaybackActive
+      ? localMediaPlaylistIndex
+      : 0;
+  await playLocalMediaPlaylistFromIndex(startIndex);
+}
+
 function stopLocalMediaPlayback() {
-  if (!localMediaLoaded) return;
-  const el =
-    localMediaLoaded.kind === "video"
-      ? $<HTMLVideoElement>("localMediaVideo")
-      : $<HTMLAudioElement>("localMediaAudio");
-  el.pause();
-  try {
-    el.currentTime = 0;
-  } catch {
-    /* ignore */
+  if (localMediaLoaded) {
+    const el =
+      localMediaLoaded.item.kind === "video"
+        ? $<HTMLVideoElement>("localMediaVideo")
+        : $<HTMLAudioElement>("localMediaAudio");
+    el.pause();
+    try {
+      el.currentTime = 0;
+    } catch {
+      /* ignore */
+    }
   }
   localMediaPlaybackActive = false;
+  localMediaSequentialPlay = false;
+  stopLocalMediaPreviewKeepalive();
+  void ensurePreviewMonitor();
   updateLocalMediaUi();
+  renderLocalMediaPlaylist();
   $("localMediaStatus").classList.remove("playing");
-  $("localMediaStatus").textContent = "播放已停止。";
+  $("localMediaStatus").textContent = localMediaPlaylist.length > 0 ? "播放已停止。" : playlistReadyStatus(0, isLocalMediaEndedAutoStartEnabled(settings));
 }
 
 async function persistDefaultDevice() {
@@ -381,12 +638,19 @@ function readRecordingNameConfigFromUi(): RecordingNameConfig {
       }
       if (kind === "number") {
         const input = document.getElementById(`rec-name-number-${id}`) as HTMLInputElement | null;
+        const cycleInput = document.getElementById(`rec-name-cycle-${id}`) as HTMLInputElement | null;
         const seed = input ? Number(input.value) : prev?.numberSeed;
+        const cycleRaw = cycleInput?.value.trim() ?? "";
+        const cycleParsed = cycleRaw === "" ? NaN : Number(cycleRaw);
         return [
           createRecordingNameItem("number", {
             id,
             numberSeed: seed,
-            numberSeedDate: prev?.numberSeedDate
+            numberSeedDate: prev?.numberSeedDate,
+            numberCycleMax:
+              cycleRaw !== "" && Number.isFinite(cycleParsed) && cycleParsed > 0
+                ? Math.floor(cycleParsed)
+                : undefined
           })
         ];
       }
@@ -430,11 +694,16 @@ function renderRecordingNameFields(items: RecordingNameItem[]) {
       if (item.kind === "number") {
         counts.number += 1;
         const label = same.number > 1 ? `起始编号 ${counts.number}` : "起始编号";
-        return `<div class="rec-name-extra">
+        const cycleLabel = same.number > 1 ? `一轮最大值 ${counts.number}` : "一轮最大值";
+        const cycleVal = item.numberCycleMax != null && item.numberCycleMax > 0 ? String(item.numberCycleMax) : "";
+        return `<div class="rec-name-extra rec-name-number-block">
           <label>${label}
             <input id="rec-name-number-${item.id}" type="number" min="0" max="999999" step="1" value="${item.numberSeed ?? 1}">
           </label>
-          <p class="hint rec-name-number-hint">今天使用此数字；到了明天会自动加 1。</p>
+          <label>${cycleLabel}
+            <input id="rec-name-cycle-${item.id}" type="number" min="1" max="999999" step="1" value="${cycleVal}" placeholder="不限制（留空）">
+          </label>
+          <p class="hint rec-name-number-hint"><strong>一轮最大值</strong>：例如填 8，编号到 8 后下一天回到 1。留空则一直递增（1、2、3…）。</p>
         </div>`;
       }
       if (item.kind === "custom") {
@@ -572,16 +841,36 @@ function stopPlaybackIfSession(sessionId?: string) {
   playingAudio = undefined;
 }
 
-function updateClearHistoryButton() {
+function updateHistoryToolbar() {
   const clearBtn = $<HTMLButtonElement>("clearHistory");
-  if (!clearBtn) return;
-  if (clearingHistory) {
-    clearBtn.disabled = true;
-    clearBtn.textContent = "正在清空……";
-    return;
+  const exportBtn = $<HTMLButtonElement>("exportHistory");
+  const importBtn = $<HTMLButtonElement>("importHistory");
+  const historyBusy = exportingHistory || importingHistory || clearingHistory;
+
+  if (clearBtn) {
+    if (clearingHistory) {
+      clearBtn.disabled = true;
+      clearBtn.textContent = "正在清空……";
+    } else {
+      clearBtn.textContent = "清空历史";
+      clearBtn.disabled = historyBusy || historyRecords.length === 0;
+    }
   }
-  clearBtn.textContent = "清空历史";
-  clearBtn.disabled = historyRecords.length === 0;
+
+  if (exportBtn) {
+    exportBtn.disabled = historyBusy || historyRecords.length === 0;
+    exportBtn.textContent = exportingHistory ? "正在导出……" : "导出备份";
+  }
+
+  if (importBtn) {
+    importBtn.disabled = historyBusy;
+    importBtn.textContent = importingHistory ? "正在导入……" : "导入备份";
+  }
+}
+
+/** @deprecated use updateHistoryToolbar */
+function updateClearHistoryButton() {
+  updateHistoryToolbar();
 }
 
 function applyHistoryRecords(records: Session[], activeIds?: string[]) {
@@ -1500,6 +1789,37 @@ function stopDownloadModeHint(mode: StopDownloadMode): string {
   return "最安全。停止后马上取得录音，MP3完成后再自动下载。";
 }
 
+async function refreshDownloadFolderUi() {
+  const folderInput = $<HTMLInputElement>("downloadFolder");
+  if (folderInput) folderInput.value = settings.downloadFolder ?? "";
+  const label = $("downloadFolderLabel");
+  const useBtn = $<HTMLButtonElement>("useDownloadFolderBtn");
+  const pickBtn = $<HTMLButtonElement>("pickDownloadFolder");
+  const hasCustom = Boolean(await getSavedDownloadDirectory());
+  if (pickBtn) {
+    pickBtn.disabled = !supportsDirectoryPicker();
+    pickBtn.title = supportsDirectoryPicker()
+      ? "保存到 D 盘等其他位置（不能选「下载」根目录）"
+      : "当前浏览器不支持文件夹选择";
+  }
+  if (useBtn) useBtn.classList.toggle("active-mode", !hasCustom);
+  if (pickBtn) pickBtn.classList.toggle("active-mode", hasCustom);
+  const pathLabel = await describeDownloadDirectory(settings.downloadFolder);
+  if (label) {
+    label.textContent = hasCustom
+      ? `当前：${pathLabel}`
+      : `当前：${downloadFolderHint(settings.downloadFolder)}`;
+  }
+}
+
+async function useBrowserDownloadFolder() {
+  await clearSavedDownloadDirectory();
+  settings.customDownloadDirectoryName = undefined;
+  await persistDownloadSettings();
+  await refreshDownloadFolderUi();
+  setStatus("已设为保存到浏览器下载文件夹。");
+}
+
 function syncDownloadSettingsUi() {
   const mode = (settings.stopDownloadMode || "original_then_mp3") as StopDownloadMode;
   const modeEl = $<HTMLSelectElement>("stopDownloadMode");
@@ -1512,6 +1832,7 @@ function syncDownloadSettingsUi() {
     settings.autoDownloadMp3AfterSuccess !== false && settings.autoDownloadMp3 !== false;
   const keep = $<HTMLInputElement>("keepOriginalAfterMp3");
   if (keep) keep.checked = settings.keepOriginalAfterMp3 !== false;
+  void refreshDownloadFolderUi();
 }
 
 async function persistDownloadSettings() {
@@ -1656,13 +1977,56 @@ $("recNameItemFields").addEventListener("input", () => {
   void persistRecordingNameConfig(readRecordingNameConfigFromUi());
 });
 $("localMediaFile").onchange = () => {
-  const file = $<HTMLInputElement>("localMediaFile").files?.[0];
-  if (!file) return;
-  void loadLocalMediaFile(file);
-  $<HTMLInputElement>("localMediaFile").value = "";
+  const input = $<HTMLInputElement>("localMediaFile");
+  const files = input.files;
+  if (!files?.length) return;
+  addLocalMediaFiles(files);
+  input.value = "";
 };
-$("localMediaPlayBtn").onclick = () => void playLocalMedia();
+$("localMediaClearPlaylistBtn").onclick = () => clearLocalMediaPlaylist();
+$("localMediaPlayBtn").onclick = () => void playLocalMediaPlaylist();
 $("localMediaStopBtn").onclick = () => stopLocalMediaPlayback();
+$("localMediaPlaylist").addEventListener("dragstart", (e) => {
+  if (localMediaPlaybackActive || recording || busy) {
+    e.preventDefault();
+    return;
+  }
+  if ((e.target as HTMLElement).closest(".local-media-playlist-actions")) {
+    e.preventDefault();
+    return;
+  }
+  const item = (e.target as HTMLElement).closest<HTMLElement>(".local-media-playlist-item[data-id]");
+  if (!item) return;
+  localMediaDragId = item.dataset.id || null;
+  item.classList.add("dragging");
+  e.dataTransfer?.setData("text/plain", localMediaDragId || "");
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+});
+$("localMediaPlaylist").addEventListener("dragend", () => {
+  localMediaDragId = null;
+  $("localMediaPlaylist")
+    .querySelectorAll(".local-media-playlist-item.dragging, .local-media-playlist-item.drag-over")
+    .forEach((el) => el.classList.remove("dragging", "drag-over"));
+});
+$("localMediaPlaylist").addEventListener("dragover", (e) => {
+  if (!localMediaDragId || localMediaPlaybackActive || recording || busy) return;
+  e.preventDefault();
+  const item = (e.target as HTMLElement).closest<HTMLElement>(".local-media-playlist-item[data-id]");
+  $("localMediaPlaylist")
+    .querySelectorAll(".local-media-playlist-item.drag-over")
+    .forEach((el) => el.classList.remove("drag-over"));
+  if (item && item.dataset.id !== localMediaDragId) item.classList.add("drag-over");
+});
+$("localMediaPlaylist").addEventListener("drop", (e) => {
+  e.preventDefault();
+  const item = (e.target as HTMLElement).closest<HTMLElement>(".local-media-playlist-item[data-id]");
+  item?.classList.remove("drag-over");
+  const from = localMediaDragId;
+  const to = item?.dataset.id;
+  localMediaDragId = null;
+  if (!from || !to || from === to) return;
+  moveLocalMediaPlaylistItem(from, to);
+});
 $("start").onclick = () => void startRecording();
 $("stop").onclick = () => void stopRecording();
 $("settingsBtn").onclick = () => $("settingsPanel").classList.toggle("hidden");
@@ -1707,6 +2071,34 @@ $("autoDownloadOriginal").onchange = async () => {
 $("keepOriginalAfterMp3").onchange = async () => {
   settings.keepOriginalAfterMp3 = $<HTMLInputElement>("keepOriginalAfterMp3").checked;
   await persistDownloadSettings();
+};
+$("downloadFolder").onchange = async () => {
+  settings.downloadFolder = $<HTMLInputElement>("downloadFolder").value.trim();
+  await refreshDownloadFolderUi();
+  await persistDownloadSettings();
+};
+$("downloadFolder").oninput = () => {
+  settings.downloadFolder = $<HTMLInputElement>("downloadFolder").value.trim();
+  void refreshDownloadFolderUi();
+};
+$("useDownloadFolderBtn").onclick = () => {
+  void useBrowserDownloadFolder();
+};
+$("pickDownloadFolder").onclick = async () => {
+  try {
+    const handle = await pickDownloadDirectory();
+    settings.customDownloadDirectoryName = handle.name;
+    await persistDownloadSettings();
+    await refreshDownloadFolderUi();
+    setStatus(`已选择保存文件夹：${handle.name}`);
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") return;
+    if (isProtectedFolderPickError(e)) {
+      setStatus(friendlyProtectedFolderPickError());
+      return;
+    }
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+  }
 };
 $("stopDownloadMode").onchange = async () => {
   const mode = $<HTMLSelectElement>("stopDownloadMode").value as StopDownloadMode;
@@ -1879,6 +2271,86 @@ $("clearHistory").onclick = async () => {
 };
 $("clearAll").onclick = () => void $("clearHistory").click();
 
+async function downloadBackupBlob(blob: Blob, filename: string) {
+  const saved = await saveDownloadBlob(blob, filename);
+  if (!saved.ok) throw new Error(saved.error.message);
+}
+
+function formatBackupSize(bytes: number) {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
+$("exportHistory").onclick = async () => {
+  if (exportingHistory || importingHistory || clearingHistory) return;
+  exportingHistory = true;
+  updateHistoryToolbar();
+  try {
+    const result = await exportHistoryBackup((msg) => setStatus(msg));
+    const filename = buildHistoryBackupFileName();
+    await downloadBackupBlob(result.blob, filename);
+    const skipNote =
+      result.skippedSessionIds.length > 0
+        ? `，已跳过处理中 ${result.skippedSessionIds.length} 条`
+        : "";
+    setStatus(
+      `已导出 ${result.exportedSessions} 条录音历史（约 ${formatBackupSize(result.totalBytes)}）${skipNote}。`
+    );
+  } catch (e) {
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+  } finally {
+    exportingHistory = false;
+    updateHistoryToolbar();
+  }
+};
+
+$("importHistory").onclick = () => {
+  if (exportingHistory || importingHistory || clearingHistory) return;
+  $<HTMLInputElement>("importHistoryFile").click();
+};
+
+$<HTMLInputElement>("importHistoryFile").onchange = async (ev) => {
+  const input = ev.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file || importingHistory || exportingHistory || clearingHistory) return;
+
+  const sizeLabel = formatBackupSize(file.size);
+  const confirmed = await showConfirm({
+    title: "导入录音历史备份？",
+    body: `将导入文件「${file.name}」（${sizeLabel}）中的录音记录。现有历史不会被删除，导入的记录会追加到列表中。`,
+    cancelText: "取消",
+    okText: "开始导入"
+  });
+  if (!confirmed) return;
+
+  importingHistory = true;
+  updateHistoryToolbar();
+  try {
+    const result = await importHistoryBackup(file, (msg) => setStatus(msg));
+    invalidateHistoryReads("import_started");
+    await reloadHistoryVerified("after_import");
+    const errorNote =
+      result.errors.length > 0 ? `，${result.errors.length} 条警告（详见控制台）。` : "";
+    if (result.importedSessions === 0) {
+      setStatus(`未能导入任何录音。${result.errors[0] || ""}`.trim());
+    } else {
+      setStatus(
+        `已导入 ${result.importedSessions} 条录音历史${result.skippedSessions > 0 ? `，跳过 ${result.skippedSessions} 条` : ""}${errorNote}`
+      );
+    }
+    if (result.errors.length) console.warn("[HistoryImport]", result.errors);
+  } catch (e) {
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+    await reloadHistoryVerified("after_import_fail");
+  } finally {
+    importingHistory = false;
+    updateHistoryToolbar();
+  }
+};
+
 
 chrome.runtime.onMessage.addListener((msg: AudioLevelUpdate | Request) => {
   if (msg && "type" in msg && msg.type === MessageType.RequestAutoStart) {
@@ -1909,10 +2381,21 @@ if (historyChannel) {
   };
 }
 
-navigator.mediaDevices?.addEventListener("devicechange", () => void refreshDevices());
+navigator.mediaDevices?.addEventListener("devicechange", () => {
+  if (localMediaPlaybackActive) {
+    void ensurePreviewMonitor();
+    return;
+  }
+  void refreshDevices();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !recording && !busy) {
+    void ensurePreviewMonitor();
+  }
+});
 window.addEventListener("beforeunload", () => {
   void stopPreview();
-  clearLocalMedia();
+  clearLocalMediaPlaylist();
   void ask(MessageType.UnsubscribeLevels).catch(() => undefined);
 });
 

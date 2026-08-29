@@ -1,3 +1,4 @@
+import { saveDownloadBlob } from "../download-save";
 import { buildOriginalFileName, buildRecoveryZipName, formatStamp, sanitizeFileBase } from "../filename";
 import { storage } from "../storage-manager";
 import { type Chunk, type Part, type Session } from "../types";
@@ -65,46 +66,6 @@ function extFromMime(mime: string): string {
   if (/mp4|m4a|aac/i.test(mime)) return "m4a";
   if (/wav/i.test(mime)) return "wav";
   return "webm";
-}
-
-function scheduleRevoke(url: string, downloadId?: number) {
-  if (typeof downloadId === "number" && chrome.downloads?.onChanged) {
-    const onChanged = (delta: chrome.downloads.DownloadDelta) => {
-      if (delta.id !== downloadId) return;
-      if (delta.state?.current === "complete" || delta.state?.current === "interrupted" || delta.error) {
-        chrome.downloads.onChanged.removeListener(onChanged);
-        URL.revokeObjectURL(url);
-      }
-    };
-    chrome.downloads.onChanged.addListener(onChanged);
-    setTimeout(() => {
-      chrome.downloads.onChanged.removeListener(onChanged);
-      URL.revokeObjectURL(url);
-    }, 10 * 60 * 1000);
-  } else {
-    setTimeout(() => URL.revokeObjectURL(url), 120_000);
-  }
-}
-
-async function chromeDownload(url: string, filename: string, saveAs = false): Promise<number | undefined> {
-  if (!chrome.downloads?.download) throw new Error("DOWNLOADS_UNAVAILABLE");
-  return chrome.downloads.download({
-    url,
-    filename: `SafeCallRecorder/${filename}`,
-    saveAs,
-    conflictAction: "uniquify"
-  });
-}
-
-function anchorDownload(url: string, filename: string) {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
 }
 
 export async function prepareOriginalExport(
@@ -176,31 +137,20 @@ export async function downloadOriginalRecording(
         const one = usable[0]!;
         const ext = extFromMime(one.mimeType);
         const filename = buildOriginalFileName(display, ext);
-        const url = URL.createObjectURL(one.blob);
-        try {
-          let downloadId: number | undefined;
-          try {
-            downloadId = await chromeDownload(url, filename, options?.saveAs === true);
-          } catch {
-            anchorDownload(url, filename);
-          }
-          scheduleRevoke(url, downloadId);
-          session.originalStatus = "available";
-          session.originalFileName = filename;
-          session.originalMimeType = one.mimeType;
-          session.originalError = undefined;
-          await storage.saveSession(session);
-          return {
-            ok: true,
-            kind: "webm",
-            filename,
-            downloadId,
-            partCount: 1
-          };
-        } catch (e) {
-          URL.revokeObjectURL(url);
-          throw e;
-        }
+        const saved = await saveDownloadBlob(one.blob, filename, { saveAs: options?.saveAs === true });
+        if (!saved.ok) throw new Error(saved.error.message);
+        session.originalStatus = "available";
+        session.originalFileName = filename;
+        session.originalMimeType = one.mimeType;
+        session.originalError = undefined;
+        await storage.saveSession(session);
+        return {
+          ok: true,
+          kind: "webm",
+          filename: saved.filename,
+          downloadId: saved.downloadId,
+          partCount: 1
+        };
       }
 
       // Multi-part: ZIP with each playable part + session.json
@@ -232,25 +182,14 @@ export async function downloadOriginalRecording(
 
       const zipBlob = buildStoreZip(zipEntries);
       const filename = buildRecoveryZipName(display);
-      const url = URL.createObjectURL(zipBlob);
-      try {
-        let downloadId: number | undefined;
-        try {
-          downloadId = await chromeDownload(url, filename, options?.saveAs === true);
-        } catch {
-          anchorDownload(url, filename);
-        }
-        scheduleRevoke(url, downloadId);
-        session.originalStatus = "available";
-        session.originalFileName = filename;
-        session.originalMimeType = "application/zip";
-        session.originalError = undefined;
-        await storage.saveSession(session);
-        return { ok: true, kind: "zip", filename, downloadId, partCount: usable.length };
-      } catch (e) {
-        URL.revokeObjectURL(url);
-        throw e;
-      }
+      const saved = await saveDownloadBlob(zipBlob, filename, { saveAs: options?.saveAs === true });
+      if (!saved.ok) throw new Error(saved.error.message);
+      session.originalStatus = "available";
+      session.originalFileName = filename;
+      session.originalMimeType = "application/zip";
+      session.originalError = undefined;
+      await storage.saveSession(session);
+      return { ok: true, kind: "zip", filename: saved.filename, downloadId: saved.downloadId, partCount: usable.length };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       session.originalStatus = "download_failed";

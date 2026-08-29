@@ -63,6 +63,34 @@ describe("recording name builder", () => {
     expect(daysBetweenLocal("2026-08-23", "2026-08-25")).toBe(2);
   });
 
+  it("wraps daily number when numberCycleMax is set", () => {
+    const item = {
+      id: "n1",
+      kind: "number" as const,
+      numberSeed: 1,
+      numberSeedDate: "2026-08-23",
+      numberCycleMax: 8
+    };
+    expect(
+      buildRecordingName(
+        { dateIncludeYear: false, items: [{ id: "d1", kind: "date" }, item] },
+        day
+      )
+    ).toBe("08231");
+    expect(
+      buildRecordingName(
+        { dateIncludeYear: false, items: [{ id: "d1", kind: "date" }, item] },
+        new Date(2026, 7, 30)
+      )
+    ).toBe("08308");
+    expect(
+      buildRecordingName(
+        { dateIncludeYear: false, items: [{ id: "d1", kind: "date" }, item] },
+        new Date(2026, 7, 31)
+      )
+    ).toBe("08311");
+  });
+
   it("uses custom only without auto timestamp", () => {
     expect(
       buildRecordingName(

@@ -1,31 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 420" role="img" aria-label="控制面板界面示意">
-  <rect width="760" height="420" fill="#f1f5f9"/>
-  <rect x="24" y="20" width="712" height="380" rx="16" fill="#fff" stroke="#e2e8f0"/>
-  <rect x="44" y="36" width="36" height="36" rx="8" fill="#0f766e"/>
-  <text x="90" y="52" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#0f172a">SafeCallRecorder</text>
-  <text x="90" y="68" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#64748b">录音仅保存在本机，不会上传</text>
-  <rect x="560" y="34" width="88" height="28" rx="8" fill="#e0f2fe" stroke="#bae6fd"/>
-  <text x="604" y="52" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#1769aa">使用说明</text>
-  <rect x="656" y="34" width="32" height="28" rx="8" fill="#fff" stroke="#e2e8f0"/>
-  <text x="44" y="98" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#334155">声音设备</text>
-  <rect x="44" y="104" width="644" height="30" rx="8" fill="#fff" stroke="#cbd5e1"/>
-  <text x="56" y="123" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" fill="#0f172a">Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)</text>
-  <rect x="44" y="146" width="644" height="72" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="56" y="166" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#0f172a">设备核对</text>
-  <rect x="56" y="194" width="620" height="18" rx="6" fill="#f0fdfa" stroke="#99f6e4"/>
-  <text x="66" y="207" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#0f766e">一致：插件选择与浏览器默认输入相同</text>
-  <rect x="44" y="228" width="644" height="56" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
-  <text x="56" y="248" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#0f172a">本地媒体播放</text>
-  <rect x="56" y="256" width="88" height="22" rx="6" fill="#fff" stroke="#cbd5e1"/>
-  <text x="100" y="271" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#334155">选择本地文件</text>
-  <rect x="152" y="256" width="44" height="22" rx="6" fill="#0f766e"/>
-  <text x="174" y="271" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#fff">播放</text>
-  <rect x="44" y="294" width="644" height="48" rx="10" fill="#f0fdfa" stroke="#99f6e4"/>
-  <text x="56" y="314" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#0f766e">检测到声音</text>
-  <rect x="130" y="322" width="520" height="10" rx="5" fill="#dbeafe"/>
-  <rect x="130" y="322" width="360" height="10" rx="5" fill="#6366f1"/>
-  <rect x="44" y="354" width="120" height="34" rx="10" fill="#0f766e"/>
-  <text x="104" y="375" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#fff">开始录音</text>
-  <rect x="176" y="354" width="120" height="34" rx="10" fill="#fff" stroke="#fecaca"/>
-  <text x="236" y="375" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#b91c1c">停止录音</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 700" role="img" aria-label="控制面板界面示意">
+  <rect width="760" height="700" fill="#eef3f8"/>
+  <rect x="20" y="16" width="720" height="56" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <rect x="36" y="28" width="36" height="36" rx="8" fill="#0f766e" stroke="none" stroke-width="1"/>
+  <text x="84" y="44" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="18" font-weight="700" fill="#152033" text-anchor="start">SafeCallRecorder</text>
+  <text x="84" y="60" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#0f766e" text-anchor="start">录音仅保存在本机，不会上传。</text>
+  <rect x="588" y="30" width="96" height="28" rx="10" fill="#e0f2fe" stroke="#bae6fd" stroke-width="1"/>
+  <text x="636" y="48" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="800" fill="#1769aa" text-anchor="middle">？ 使用说明</text>
+  <rect x="692" y="30" width="32" height="28" rx="10" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="708" y="48" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="600" fill="#334155" text-anchor="middle">⚙</text>
+
+  <rect x="20" y="84" width="720" height="600" rx="16" fill="#ffffff" stroke="#ffffffaa" stroke-width="1"/>
+
+  <rect x="42" y="104" width="676" height="52" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="54" y="122" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748b" text-anchor="start">录音名称</text>
+  <text x="54" y="144" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="700" fill="#152033" text-anchor="start">0823VK1</text>
+  <rect x="628" y="116" width="78" height="28" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="667" y="134" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="600" fill="#334155" text-anchor="middle">修改</text>
+
+  <text x="42" y="178" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="600" fill="#334155" text-anchor="start">声音设备</text>
+  <rect x="42" y="184" width="632" height="38" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="54" y="208" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#152033" text-anchor="start">Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)</text>
+  <rect x="682" y="190" width="36" height="36" rx="10" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="700" y="212" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16" font-weight="600" fill="#334155" text-anchor="middle">↻</text>
+  <text x="42" y="232" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#1769aa" text-anchor="start">不会选设备？</text>
+
+  <rect x="42" y="246" width="676" height="148" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="56" y="268" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#152033" text-anchor="start">设备核对</text>
+  <text x="660" y="268" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#1769aa" text-anchor="end">重新核对</text>
+  <text x="56" y="292" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="start">插件当前选择</text>
+  <text x="172" y="292" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#152033" text-anchor="start">Voicemeeter Out B1（VoiceMeeter）</text>
+  <text x="56" y="312" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="start">浏览器默认输入</text>
+  <text x="172" y="312" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#152033" text-anchor="start">Voicemeeter Out B1（VoiceMeeter）</text>
+  <text x="56" y="332" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="start">声道</text>
+  <text x="172" y="332" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#152033" text-anchor="start">2 声道</text>
+  <text x="56" y="352" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#64748b" text-anchor="start">立体声</text>
+  <text x="172" y="352" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="700" fill="#0f766e" text-anchor="start">立体声 L/R 正常</text>
+  <rect x="56" y="364" width="648" height="22" rx="8" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1"/>
+  <text x="66" y="379" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" font-weight="700" fill="#0f766e" text-anchor="start">一致。插件选择与浏览器默认输入相同。</text>
+
+  <rect x="42" y="406" width="676" height="118" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="56" y="428" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14" font-weight="700" fill="#152033" text-anchor="start">本地媒体播放</text>
+  <text x="560" y="428" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="600" fill="#64748b" text-anchor="start">播完后自动开始录音</text>
+  <rect x="56" y="438" width="96" height="28" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="104" y="456" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#334155" text-anchor="middle">选择本地文件</text>
+  <rect x="160" y="438" width="48" height="28" rx="8" fill="#0f766e" stroke="#0f766e" stroke-width="1"/>
+  <text x="184" y="456" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#fff" text-anchor="middle">播放</text>
+  <text x="56" y="482" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="600" fill="#334155" text-anchor="start">未选择文件</text>
+  <text x="56" y="508" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" font-weight="600" fill="#64748b" text-anchor="start">选择 mp4、mp3 等本地文件并播放；播放结束后将自动开始录音（需在设置中开启）。</text>
+
+  <rect x="42" y="536" width="676" height="108" rx="18" fill="url(#meterGrad)" stroke="#e0e7ff" stroke-width="1"/>
+  <defs><linearGradient id="meterGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e0f2fe"/><stop offset="55%" stop-color="#ede9fe"/><stop offset="100%" stop-color="#faf5ff"/></linearGradient></defs>
+  <circle cx="68" cy="560" r="4.5" fill="#14b8a6"/>
+  <text x="82" y="564" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#0f766e" text-anchor="start">检测到声音</text>
+  <rect x="588" y="550" width="72" height="20" rx="999" fill="#ccfbf1" stroke="#99f6e4" stroke-width="1"/>
+  <text x="624" y="564" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" font-weight="700" fill="#0f766e" text-anchor="middle">声音正常</text>
+  <text x="56" y="586" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="600" fill="#475569" text-anchor="start">Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)</text>
+  <rect x="56" y="596" width="648" height="28" rx="10" fill="#fff" stroke="#c7d2fe" stroke-width="1"/>
+  <rect x="64" y="608" width="12" height="16" rx="3" fill="#6366f1" stroke="none" stroke-width="1"/>
+  <rect x="80" y="602" width="12" height="22" rx="3" fill="#818cf8" stroke="none" stroke-width="1"/>
+  <rect x="96" y="606" width="12" height="18" rx="3" fill="#6366f1" stroke="none" stroke-width="1"/>
+  <rect x="112" y="600" width="12" height="24" rx="3" fill="#a78bfa" stroke="none" stroke-width="1"/>
+  <rect x="128" y="604" width="12" height="20" rx="3" fill="#6366f1" stroke="none" stroke-width="1"/>
+
+  <rect x="42" y="656" width="120" height="36" rx="12" fill="#0d9488" stroke="#0d9488" stroke-width="1"/>
+  <text x="102" y="678" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">开始录音</text>
+  <rect x="174" y="656" width="120" height="36" rx="12" fill="#dc2626" stroke="#dc2626" stroke-width="1"/>
+  <text x="234" y="678" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">停止录音</text>
 </svg>

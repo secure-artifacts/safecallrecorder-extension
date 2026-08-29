@@ -12,15 +12,15 @@ describe("stop → original download → background MP3 contract", () => {
     expect(DEFAULT_SETTINGS.keepOriginalAfterMp3).toBe(true);
   });
 
-  it("original filenames use display name without timestamp", () => {
+  it("original filenames match display name with webm extension", () => {
     const name = buildOriginalFileName("会议记录", "webm");
-    expect(name).toBe("会议记录_original.webm");
+    expect(name).toBe("会议记录.webm");
     expect(name.endsWith(".mp3")).toBe(false);
     expect(buildMp3FileName("会议记录")).toBe("会议记录.mp3");
   });
 
-  it("recovery zip name is distinct", () => {
-    expect(buildRecoveryZipName("通话")).toBe("通话_recovery.zip");
+  it("recovery zip uses display name with zip extension", () => {
+    expect(buildRecoveryZipName("通话")).toBe("通话.zip");
   });
 
   it("store zip contains multiple parts", async () => {

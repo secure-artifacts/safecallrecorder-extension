@@ -1,5 +1,6 @@
-import { storage } from "../storage-manager";
+import { saveDownloadBlob, saveDownloadUrl } from "../download-save";
 import { finalizeMp3Blob, mp3HasSeekMetadata } from "../mp3-metadata";
+import { storage } from "../storage-manager";
 import type { Mp3File, Session } from "../types";
 
 export type DownloadTrigger = "auto" | "manual" | "retry";
@@ -20,7 +21,7 @@ export type Mp3BlobResult =
     };
 
 export type DownloadResult =
-  | { ok: true; downloadId: number; filename: string; method: "chrome.downloads" | "anchor" }
+  | { ok: true; downloadId: number; filename: string; method: "chrome.downloads" | "anchor" | "filesystem"; pathLabel?: string }
   | { ok: false; error: { code: string; message: string; details?: string } };
 
 export class DownloadError extends Error {
@@ -260,25 +261,8 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   return `data:audio/mpeg;base64,${btoa(binary)}`;
 }
 
-async function downloadViaChromeApi(url: string, filename: string, saveAs: boolean): Promise<number> {
-  if (!hasDownloadsApi()) {
-    throw new DownloadError("DOWNLOAD_API_UNAVAILABLE", "浏览器下载功能不可用，请确认当前页面由扩展打开。");
-  }
-  const downloadId = await chrome.downloads.download({
-    url,
-    filename: `SafeCallRecorder/${filename}`,
-    saveAs,
-    conflictAction: "uniquify"
-  });
-  if (typeof downloadId !== "number") {
-    throw new DownloadError("DOWNLOAD_NOT_STARTED", "浏览器没有返回有效的下载任务");
-  }
-  return downloadId;
-}
-
 /**
  * Unified MP3 download used by auto-stop, history manual click, and retry.
- * Prefer calling from a visible extension page (dashboard) so blob: URLs work with chrome.downloads.
  */
 export async function downloadRecordingMp3(
   sessionId: string,
@@ -294,7 +278,6 @@ export async function downloadRecordingMp3(
   }
 
   const run = (async (): Promise<DownloadResult> => {
-    let objectUrl: string | null = null;
     try {
       log("button_clicked", { sessionId, trigger });
 
@@ -311,68 +294,56 @@ export async function downloadRecordingMp3(
         trigger
       });
 
-      objectUrl = URL.createObjectURL(loaded.blob);
-      orphanObjectUrls.add(objectUrl);
-      log("object_url_created", { sessionId, size: loaded.size });
-
       const saveAs = !!options?.saveAs;
+      log("download_requested", { sessionId, filename: loaded.filename, trigger, urlKind: "blob" });
+      const saved = await saveDownloadBlob(loaded.blob, loaded.filename, { saveAs });
+      if (saved.ok) {
+        log("download_started", {
+          sessionId,
+          downloadId: saved.downloadId,
+          filename: saved.filename,
+          method: saved.method,
+          pathLabel: saved.pathLabel
+        });
+        return {
+          ok: true,
+          downloadId: saved.downloadId ?? -1,
+          filename: saved.filename,
+          method: saved.method,
+          pathLabel: saved.pathLabel
+        };
+      }
 
-      try {
-        log("download_requested", { sessionId, filename: loaded.filename, trigger, urlKind: "blob" });
-        const downloadId = await downloadViaChromeApi(objectUrl, loaded.filename, saveAs);
-        registerDownloadObjectUrl(downloadId, objectUrl);
-        objectUrl = null;
-        log("download_started", { sessionId, downloadId, filename: loaded.filename, method: "chrome.downloads" });
-        return { ok: true, downloadId, filename: loaded.filename, method: "chrome.downloads" };
-      } catch (primary) {
-        const normalized = normalizeDownloadError(primary);
-        log("primary_download_failed", { sessionId, ...normalized, stack: primary instanceof Error ? primary.stack : undefined });
-
-        // Data URL works from offscreen / SW when blob: URLs are rejected by downloads API.
-        if (loaded.size > 0 && loaded.size <= 12 * 1024 * 1024) {
-          try {
-            const dataUrl = await blobToDataUrl(loaded.blob);
-            log("download_requested", { sessionId, filename: loaded.filename, trigger, urlKind: "data" });
-            const downloadId = await downloadViaChromeApi(dataUrl, loaded.filename, saveAs);
-            if (objectUrl) {
-              revokeUrl(objectUrl);
-              objectUrl = null;
-            }
+      if (loaded.size > 0 && loaded.size <= 12 * 1024 * 1024) {
+        try {
+          const dataUrl = await blobToDataUrl(loaded.blob);
+          log("download_requested", { sessionId, filename: loaded.filename, trigger, urlKind: "data" });
+          const urlSaved = await saveDownloadUrl(dataUrl, loaded.filename, { saveAs });
+          if (urlSaved.ok) {
             log("download_started", {
               sessionId,
-              downloadId,
-              filename: loaded.filename,
-              method: "chrome.downloads",
+              downloadId: urlSaved.downloadId,
+              filename: urlSaved.filename,
+              method: urlSaved.method,
               urlKind: "data"
             });
-            return { ok: true, downloadId, filename: loaded.filename, method: "chrome.downloads" };
-          } catch (dataErr) {
-            log("data_url_download_failed", {
-              sessionId,
-              error: dataErr instanceof Error ? dataErr.message : String(dataErr)
-            });
+            return {
+              ok: true,
+              downloadId: urlSaved.downloadId ?? -1,
+              filename: urlSaved.filename,
+              method: urlSaved.method
+            };
           }
-        }
-
-        // Fallback: <a download> when DOM is available (dashboard)
-        if (typeof document !== "undefined" && objectUrl) {
-          fallbackAnchorDownload(objectUrl, loaded.filename);
-          const urlToKeep = objectUrl;
-          objectUrl = null;
-          setTimeout(() => revokeUrl(urlToKeep), 60_000);
-          orphanObjectUrls.delete(urlToKeep);
-          log("download_started", {
+        } catch (dataErr) {
+          log("data_url_download_failed", {
             sessionId,
-            filename: loaded.filename,
-            method: "anchor",
-            primaryError: normalized.code
+            error: dataErr instanceof Error ? dataErr.message : String(dataErr)
           });
-          return { ok: true, downloadId: -1, filename: loaded.filename, method: "anchor" };
         }
-        throw primary;
       }
+
+      throw new DownloadError(saved.error.code, saved.error.message);
     } catch (e) {
-      if (objectUrl) revokeUrl(objectUrl);
       const err = normalizeDownloadError(e);
       log("download_failed", {
         sessionId,

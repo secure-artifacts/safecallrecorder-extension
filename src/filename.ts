@@ -25,15 +25,15 @@ export function buildMp3FileName(displayName: string | undefined, suffix = 0): s
   return `${fileBase(displayName, suffix)}.mp3`;
 }
 
-/** Single-part original capture (usually WebM/Opus). */
+/** Single-part original capture — same base name as MP3, different extension. */
 export function buildOriginalFileName(displayName: string | undefined, ext = "webm", suffix = 0): string {
   const cleanExt = sanitizeFileBase(ext).replace(/^\./, "") || "webm";
-  return `${fileBase(displayName, suffix)}_original.${cleanExt}`;
+  return `${fileBase(displayName, suffix)}.${cleanExt}`;
 }
 
-/** Multi-part recovery package. */
+/** Multi-part recovery package — same base name, .zip extension. */
 export function buildRecoveryZipName(displayName: string | undefined, suffix = 0): string {
-  return `${fileBase(displayName, suffix)}_recovery.zip`;
+  return `${fileBase(displayName, suffix)}.zip`;
 }
 
 export {

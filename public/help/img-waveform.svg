@@ -1,13 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 180" role="img" aria-label="音浪监测示意">
-  <rect width="640" height="180" fill="#f0fdfa"/>
-  <rect x="20" y="20" width="600" height="140" rx="12" fill="#fff" stroke="#99f6e4"/>
-  <text x="36" y="48" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#0f766e">检测到声音</text>
-  <rect x="520" y="34" width="72" height="20" rx="999" fill="#fef3c7" stroke="#fde68a"/>
-  <text x="556" y="48" text-anchor="middle" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#a16207">声音较小</text>
-  <rect x="48" y="110" width="12" height="18" rx="3" fill="#6366f1"/>
-  <rect x="64" y="98" width="12" height="30" rx="3" fill="#818cf8"/>
-  <rect x="80" y="104" width="12" height="24" rx="3" fill="#6366f1"/>
-  <rect x="96" y="92" width="12" height="36" rx="3" fill="#a78bfa"/>
-  <rect x="112" y="100" width="12" height="28" rx="3" fill="#6366f1"/>
-  <text x="36" y="156" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" fill="#065f46">音浪跳动表示插件已收到该设备里的声音，可以开始录音。</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" role="img" aria-label="音浪监测示意">
+  <rect width="640" height="200" fill="#eef3f8"/>
+  <rect x="20" y="20" width="600" height="160" rx="18" fill="url(#waveGrad)" stroke="#e0e7ff" stroke-width="1"/>
+  <defs><linearGradient id="waveGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e0f2fe"/><stop offset="55%" stop-color="#ede9fe"/><stop offset="100%" stop-color="#faf5ff"/></linearGradient></defs>
+  <circle cx="44" cy="44" r="4.5" fill="#14b8a6"/>
+  <text x="58" y="48" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="700" fill="#0f766e" text-anchor="start">检测到声音</text>
+  <rect x="520" y="34" width="72" height="20" rx="999" fill="#fef3c7" stroke="#fde68a" stroke-width="1"/>
+  <text x="556" y="48" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" font-weight="700" fill="#a16207" text-anchor="middle">声音较小</text>
+  <text x="36" y="72" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13" font-weight="600" fill="#475569" text-anchor="start">Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)</text>
+  <rect x="36" y="82" width="568" height="44" rx="10" fill="#fff" stroke="#c7d2fe" stroke-width="1"/>
+  <rect x="44" y="98" width="12" height="14" rx="3" fill="#6366f1" stroke="none" stroke-width="1"/>
+  <rect x="60" y="92" width="12" height="20" rx="3" fill="#818cf8" stroke="none" stroke-width="1"/>
+  <rect x="76" y="96" width="12" height="16" rx="3" fill="#6366f1" stroke="none" stroke-width="1"/>
+  <rect x="92" y="88" width="12" height="24" rx="3" fill="#a78bfa" stroke="none" stroke-width="1"/>
+  <rect x="108" y="94" width="12" height="18" rx="3" fill="#6366f1" stroke="none" stroke-width="1"/>
+  <rect x="124" y="90" width="12" height="22" rx="3" fill="#818cf8" stroke="none" stroke-width="1"/>
+  <text x="36" y="140" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#475569" text-anchor="start">当前音量：42%</text>
+  <text x="160" y="140" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="11" font-weight="600" fill="#475569" text-anchor="start">峰值：58%</text>
+  <text x="36" y="162" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="10" font-weight="600" fill="#065f46" text-anchor="start">音浪跳动表示插件已收到该设备里的声音，可以开始录音。</text>
 </svg>
