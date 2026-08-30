@@ -229,7 +229,8 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, reply) => {
       msg.type === MessageType.GoogleDriveSetFolder ||
       msg.type === MessageType.GoogleDriveCreateFolder ||
       msg.type === MessageType.GoogleDriveEnsureDefaultFolder ||
-      msg.type === MessageType.GoogleDriveUploadMp3
+      msg.type === MessageType.GoogleDriveUploadMp3 ||
+      msg.type === MessageType.GoogleDriveRevokeAuth
     ) {
       const data = await handleGoogleDriveMessage(msg.type, msg.payload || {});
       return reply({ ok: true, requestId: msg.requestId, data });

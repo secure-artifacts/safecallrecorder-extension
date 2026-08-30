@@ -1,4 +1,4 @@
-import { connectGoogleAccount, revokeGoogleAuthToken } from "./auth";
+import { connectGoogleAccount, getExtensionAuthInfo, revokeGoogleAuthToken } from "./auth";
 import { isGoogleDriveConfigured } from "./config";
 import { createDriveFolder, ensureDefaultDriveFolder, listDriveFolders } from "./drive-api";
 import { uploadSessionMp3ToDrive } from "./upload-service";
@@ -24,15 +24,23 @@ export async function handleGoogleDriveMessage(
   if (type === "GOOGLE_DRIVE_GET_STATUS") {
     const settings = await loadSettings();
     return {
-      configured: isGoogleDriveConfigured(),
+      configured: isGoogleDriveConfigured(settings),
       enabled: settings.googleDriveEnabled === true,
       connected: Boolean(settings.googleDriveAccountEmail),
       email: settings.googleDriveAccountEmail,
+      clientId: settings.googleDriveClientId,
       folderId: settings.googleDriveFolderId,
       folderName: settings.googleDriveFolderName,
       uploadMode: settings.googleDriveUploadMode || "local_and_cloud",
-      autoUploadOnStop: settings.googleDriveAutoUploadOnStop !== false
+      autoUploadOnStop: settings.googleDriveAutoUploadOnStop !== false,
+      ...getExtensionAuthInfo()
     };
+  }
+
+  if (type === "GOOGLE_DRIVE_REVOKE_AUTH") {
+    await revokeGoogleAuthToken().catch(() => undefined);
+    await saveSettings({ googleDriveAccountEmail: undefined });
+    return { ok: true };
   }
 
   if (type === "GOOGLE_DRIVE_CONNECT") {

@@ -75,7 +75,13 @@ import {
 } from "./device-verify";
 import { canContinueRecording } from "./recording-continue";
 import { driveUploadLabel } from "./google-drive/upload-service";
-import { googleDriveSetupHint, isGoogleDriveConfigured } from "./google-drive/config";
+import { getGoogleRedirectUri, googleDriveSetupHint, isGoogleDriveConfigured } from "./google-drive/config";
+import {
+  applyGoogleDriveConfig,
+  googleDriveConfigFileName,
+  parseGoogleDriveConfig,
+  serializeGoogleDriveConfig
+} from "./google-drive/config-backup";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const fmt = (ms: number) => {
@@ -1921,11 +1927,17 @@ let driveFolderBrowseStack: DriveFolderBrowseFrame[] = [{ name: "我的云端硬
 function syncGoogleDriveSettingsUi() {
   const enabled = $<HTMLInputElement>("googleDriveEnabled");
   if (enabled) enabled.checked = settings.googleDriveEnabled === true;
+  const clientInput = $<HTMLInputElement>("googleDriveClientId");
+  if (clientInput) clientInput.value = settings.googleDriveClientId ?? "";
+  const extId = $("googleDriveExtensionId");
+  const redirect = $("googleDriveRedirectUri");
+  if (extId) extId.textContent = chrome.runtime.id;
+  if (redirect) redirect.textContent = getGoogleRedirectUri();
   const mode = $<HTMLSelectElement>("googleDriveUploadMode");
   if (mode) mode.value = settings.googleDriveUploadMode || "local_and_cloud";
   const auto = $<HTMLInputElement>("googleDriveAutoUploadOnStop");
   if (auto) auto.checked = settings.googleDriveAutoUploadOnStop !== false;
-  const configured = isGoogleDriveConfigured();
+  const configured = isGoogleDriveConfigured(settings);
   const setupHint = $("googleDriveSetupHint");
   if (setupHint) {
     setupHint.textContent = configured ? "" : googleDriveSetupHint();
@@ -2289,6 +2301,14 @@ $("googleDriveEnabled").onchange = async () => {
   syncGoogleDriveSettingsUi();
   await persistDownloadSettings();
 };
+$("googleDriveClientId").onchange = async () => {
+  settings.googleDriveClientId = $<HTMLInputElement>("googleDriveClientId").value.trim();
+  settings.googleDriveAccountEmail = undefined;
+  await ask(MessageType.GoogleDriveRevokeAuth).catch(() => undefined);
+  await persistDownloadSettings();
+  syncGoogleDriveSettingsUi();
+  setStatus("客户端 ID 已更新，请重新连接 Google 账号。");
+};
 $("googleDriveUploadMode").onchange = async () => {
   settings.googleDriveUploadMode = $<HTMLSelectElement>("googleDriveUploadMode").value as
     | "local_and_cloud"
@@ -2298,6 +2318,69 @@ $("googleDriveUploadMode").onchange = async () => {
 $("googleDriveAutoUploadOnStop").onchange = async () => {
   settings.googleDriveAutoUploadOnStop = $<HTMLInputElement>("googleDriveAutoUploadOnStop").checked;
   await persistDownloadSettings();
+};
+$("googleDriveExportConfig").onclick = () => {
+  try {
+    if (!settings.googleDriveFolderId?.trim()) {
+      setStatus("请先选择 Google Drive 文件夹后再导出配置。");
+      return;
+    }
+    const json = serializeGoogleDriveConfig(settings);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = googleDriveConfigFileName();
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    setStatus("Google 云端配置已导出。");
+  } catch (e) {
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+  }
+};
+$("googleDriveImportConfig").onclick = () => $<HTMLInputElement>("googleDriveImportConfigFile").click();
+$("googleDriveImportConfigFile").onchange = async () => {
+  const input = $<HTMLInputElement>("googleDriveImportConfigFile");
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const config = parseGoogleDriveConfig(text);
+    settings = applyGoogleDriveConfig(settings, config);
+    await persistDownloadSettings();
+    syncGoogleDriveSettingsUi();
+    if (settings.googleDriveEnabled && isGoogleDriveConfigured(settings)) {
+      setStatus("配置已导入，正在打开 Google 授权…");
+      try {
+        const data = (await ask(MessageType.GoogleDriveConnect)) as {
+          email?: string;
+          folderId?: string;
+          folderName?: string;
+        };
+        if (data.email) settings.googleDriveAccountEmail = data.email;
+        if (data.folderId) settings.googleDriveFolderId = data.folderId;
+        if (data.folderName) settings.googleDriveFolderName = data.folderName;
+        await persistDownloadSettings();
+        syncGoogleDriveSettingsUi();
+        setStatus(`配置已导入并连接 Google 账号：${data.email || ""}`);
+      } catch (e) {
+        setStatus(
+          `配置已导入（文件夹：${settings.googleDriveFolderName || settings.googleDriveFolderId}）。请点「连接 Google 账号」完成授权。`
+        );
+        if (e instanceof Error && e.message) console.warn("[GoogleDriveImport]", e.message);
+      }
+    } else {
+      setStatus(
+        `配置已导入（文件夹：${settings.googleDriveFolderName || settings.googleDriveFolderId || "—"}）。${isGoogleDriveConfigured(settings) ? "请点「连接 Google 账号」。" : googleDriveSetupHint()}`
+      );
+    }
+  } catch (e) {
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+  }
 };
 $("googleDriveConnect").onclick = async () => {
   try {

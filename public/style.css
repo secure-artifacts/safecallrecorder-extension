@@ -592,6 +592,27 @@ input[type="text"]:focus, select:focus {
   color: var(--text);
   word-break: break-all;
 }
+.google-drive-client-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.google-drive-input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+.google-drive-auth-hint code {
+  font-size: 12px;
+  word-break: break-all;
+}
 .drive-folder-modal { max-width: 520px; }
 .drive-folder-list {
   max-height: 260px;
@@ -625,6 +646,12 @@ input[type="text"]:focus, select:focus {
   border: 1px solid var(--line);
   border-radius: 8px;
   font: inherit;
+}
+.google-drive-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
 }
 .top-actions .settings-entry { white-space: nowrap; }
 .history-toolbar {

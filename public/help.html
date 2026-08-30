@@ -460,9 +460,9 @@
           <p class="help-lead">可选功能。启用后，MP3 可同步到你 Google 账号下的 Drive 文件夹；录音原始数据仍保存在本机。</p>
           <h3>首次配置</h3>
           <ol>
-            <li>在 Google Cloud Console 创建 Chrome 扩展 OAuth 客户端，启用 Drive API（详见项目中的 <code>GOOGLE_DRIVE_SETUP.md</code>）。</li>
-            <li>将客户端 ID 写入 <code>manifest.json</code> 的 <code>oauth2.client_id</code>，重新加载扩展。</li>
-            <li>在控制面板打开 <strong>Google 云端上传</strong>，勾选启用并 <strong>连接 Google 账号</strong>。</li>
+            <li>在 Google Cloud Console 创建 OAuth 客户端并启用 Drive API（详见 <code>GOOGLE_DRIVE_SETUP.md</code>）。Chrome 扩展类型需填写控制面板中显示的<strong>扩展 ID</strong>；Web 应用类型需加入<strong>重定向 URI</strong>。</li>
+            <li>在控制面板 <strong>Google 云端上传</strong> 的 <strong>OAuth 客户端 ID</strong> 输入框粘贴客户端 ID（无需再改 <code>manifest.json</code>）。</li>
+            <li>勾选启用并 <strong>连接 Google 账号</strong>。</li>
             <li>点 <strong>选择 Drive 文件夹</strong> 浏览并进入目标目录，再点 <strong>选择当前文件夹</strong>；或点 <strong>使用默认文件夹</strong> 自动创建 <code>SafeCallRecorder</code>。</li>
           </ol>
           <h3>上传方式</h3>
@@ -475,6 +475,16 @@
             <li>勾选 <strong>停止录音后自动上传 MP3</strong>：MP3 在后台生成完成后自动上传。</li>
             <li>在 <strong>录音历史</strong> 中，对已有 MP3 的记录点 <strong>上传云端</strong> 可手动上传。</li>
           </ul>
+          <h3>换浏览器：导出 / 导入配置</h3>
+          <ol>
+            <li>在旧浏览器控制面板 → <strong>Google 云端上传</strong> → 点 <strong>导出云端配置</strong>，保存 JSON 文件。</li>
+            <li>在新浏览器安装/加载扩展，点 <strong>导入云端配置</strong> 选择该文件（客户端 ID 会一并恢复）。</li>
+            <li>导入后会保留 Drive 文件夹 ID、上传方式等设置；再点 <strong>连接 Google 账号</strong> 完成授权（或导入时自动弹出授权）。</li>
+            <li>完成后即可直接上传，无需重新选择文件夹。</li>
+          </ol>
+          <div class="callout ok">
+            配置文件不含 Google 登录密码，只保存文件夹 ID、客户端 ID 与选项。换浏览器后仍需一次 Google 授权，这是 Google 安全机制要求。
+          </div>
           <div class="callout warn">
             上传到 Google Drive 需要网络。MP3 正在生成时，「上传云端」需等待生成完成。
           </div>
@@ -616,8 +626,12 @@
             <p>拖动条目左侧 ⠿ 可调整顺序，或用 ↑↓ 按钮移动。双击某条可从该条开始播放。</p>
           </details>
           <details>
+            <summary>换浏览器后还要重新设置 Google Drive 吗？</summary>
+            <p>不用重新选文件夹。在旧浏览器 <strong>导出云端配置</strong>，在新浏览器 <strong>导入云端配置</strong>（含客户端 ID），再 <strong>连接 Google 账号</strong> 授权一次即可。文件夹、上传方式等会自动恢复。</p>
+          </details>
+          <details>
             <summary>Google Drive 连接失败怎么办？</summary>
-            <p>确认已在 manifest.json 填入正确的 OAuth 客户端 ID，且该 ID 绑定了当前扩展 ID。重新 build 并加载 dist 后，再点「连接 Google 账号」。详见 <code>GOOGLE_DRIVE_SETUP.md</code>。</p>
+            <p>确认控制面板中已填写正确的 <strong>OAuth 客户端 ID</strong>。Chrome 扩展类型需绑定当前<strong>扩展 ID</strong>；Web 应用类型需把控制面板显示的重定向 URI 加入 Google Cloud 授权列表。修改后重新加载扩展，再点「连接 Google 账号」。详见 <code>GOOGLE_DRIVE_SETUP.md</code>。</p>
           </details>
           <details>
             <summary>「仅上传云端」还会在本机留录音吗？</summary>
@@ -649,7 +663,7 @@
           </div>
         </section>
 
-        <p class="help-footer" id="helpVersion">使用说明版本：1.4.0</p>
+        <p class="help-footer" id="helpVersion">使用说明版本：1.4.2</p>
       </main>
     </div>
   </div>

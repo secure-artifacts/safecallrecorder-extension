@@ -171,6 +171,8 @@ export interface AppSettings {
   googleDriveFolderId?: string;
   googleDriveFolderName?: string;
   googleDriveAccountEmail?: string;
+  /** OAuth client ID entered in UI; overrides manifest when set. */
+  googleDriveClientId?: string;
   /** Recording name builder (date / daily number / custom). */
   recordingName?: Partial<RecordingNameConfig>;
 }
