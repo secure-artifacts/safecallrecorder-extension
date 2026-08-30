@@ -658,12 +658,24 @@
           <div class="callout warn">
             <strong>可选 Google Drive 上传</strong>：若你在控制面板中启用并连接 Google 账号，MP3 会上传到你<strong>自己</strong> Google Drive 里选择的文件夹。此上传由 Google API 完成，插件不会把文件发到其他服务器。
           </div>
+          <h3>OAuth 客户端 ID 与隐私</h3>
+          <p>控制面板中的 <strong>OAuth 客户端 ID</strong> 是 Google 用来识别「哪个应用在请求授权」的<strong>公开标识</strong>，类似于应用名称，<strong>不是密码</strong>。单独知道 Client ID，无法读取你的录音，也不会自动上传任何文件。</p>
+          <ul>
+            <li><strong>录音过程不上网</strong>：正在录音时，音频只写入本机浏览器存储（IndexedDB），不会因为有 Client ID 就被发送出去。</li>
+            <li><strong>只有 MP3 可能上传</strong>：且必须同时满足：你已勾选启用 Google Drive、已连接 Google 账号、已选择目标文件夹，并在停止录音且 MP3 生成完成后（自动或手动点「上传云端」）。原始 WebM 录音默认仍留在本机。</li>
+            <li><strong>授权令牌保存在本机</strong>：连接 Google 账号后，访问令牌保存在浏览器扩展的本地存储中，仅用于向 Google Drive API 上传文件；插件代码中没有把录音发往 Google 以外服务器的逻辑。</li>
+            <li><strong>权限范围有限</strong>：插件申请的 Drive 权限为 <code>drive.file</code>（访问本应用创建/上传的文件）和 <code>drive.readonly</code>（浏览文件夹以便选择目录），不能随意读取你整个 Google 云端硬盘。</li>
+            <li><strong>建议使用自己的 Client ID</strong>：在 Google Cloud 创建属于你自己的 OAuth 客户端并填入控制面板，授权页会显示你的 Google 项目，云端文件也保存在你登录的 Google 账号下。</li>
+          </ul>
+          <div class="callout ok">
+            若不想有任何云端上传：不要勾选「启用 Google Drive 上传」，或不要点「连接 Google 账号」。已授权时可在 Google 账号的「第三方应用访问权限」中撤销本扩展的访问。
+          </div>
           <div class="callout warn">
             卸载插件可能删除插件内部保存的历史录音。卸载前请先下载需要保留的文件。
           </div>
         </section>
 
-        <p class="help-footer" id="helpVersion">使用说明版本：1.4.2</p>
+        <p class="help-footer" id="helpVersion">使用说明版本：1.4.3</p>
       </main>
     </div>
   </div>

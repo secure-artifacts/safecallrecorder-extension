@@ -66,6 +66,8 @@ describe("help system", () => {
     expect(html).toContain("换浏览器后还要重新设置");
     expect(html).toContain("仅上传云端");
     expect(html).toContain("Google Drive 连接失败");
+    expect(html).toContain("OAuth 客户端 ID");
+    expect(html).toContain("不是密码");
     expect(html).toContain("导出备份");
     expect(html).toContain("导入备份");
     expect(html).toContain("播放列表");
@@ -100,7 +102,7 @@ describe("help system", () => {
   });
 
   it("exports help content version", () => {
-    expect(HELP_CONTENT_VERSION).toBe("1.4.2");
+    expect(HELP_CONTENT_VERSION).toBe("1.4.3");
   });
 
   it("manifest includes Drive API host permission only for googleapis", () => {
