@@ -328,7 +328,7 @@ export async function importHistoryBackup(file: Blob, onProgress?: HistoryBackup
         durationMs: chunk.durationMs,
         size: chunk.size,
         mimeType: chunk.mimeType,
-        blob: new Blob([blobBytes], { type: chunk.mimeType })
+        blob: new Blob([new Uint8Array(blobBytes)], { type: chunk.mimeType })
       });
     }
 
@@ -348,7 +348,7 @@ export async function importHistoryBackup(file: Blob, onProgress?: HistoryBackup
         mimeType: mp3.mimeType,
         size: mp3.size,
         createdAt: mp3.createdAt,
-        blob: new Blob([blobBytes], { type: mp3.mimeType })
+        blob: new Blob([new Uint8Array(blobBytes)], { type: mp3.mimeType })
       });
     }
 

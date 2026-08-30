@@ -8,7 +8,9 @@ export function readStoreZip(input: ArrayBuffer | ArrayBufferView): Map<string, 
   const bytes =
     input instanceof Uint8Array
       ? input
-      : new Uint8Array(input instanceof ArrayBuffer ? input : input.buffer, input.byteOffset, input.byteLength);
+      : input instanceof ArrayBuffer
+        ? new Uint8Array(input)
+        : new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const view = new DataView(buffer);
   const len = bytes.length;
