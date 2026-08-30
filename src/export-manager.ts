@@ -9,6 +9,9 @@ import {
 } from "./download/original-download-service";
 import { mixToMono, shouldExportMono, toMp3Kbps } from "./mp3-params";
 import { finalizeMp3Blob } from "./mp3-metadata";
+import { getSettings } from "./extension-storage";
+import { maybeAutoUploadMp3AfterEncode } from "./google-drive/upload-service";
+import { shouldAutoDownloadMp3Locally } from "./google-drive/settings";
 import { storage } from "./storage-manager";
 import { id, type Chunk, type Mp3File, type Session } from "./types";
 import {
@@ -680,7 +683,15 @@ export function queueMp3GenerationInBackground(
         forceMono: options?.forceMono,
         overrideBitrate: options?.overrideBitrate
       });
-      if (options?.autoDownloadMp3) {
+      const settings = await getSettings();
+      try {
+        await maybeAutoUploadMp3AfterEncode(sessionId);
+      } catch (e) {
+        console.error("[google drive auto]", e);
+      }
+      const wantLocalMp3 =
+        options?.autoDownloadMp3 !== false && shouldAutoDownloadMp3Locally(settings);
+      if (wantLocalMp3) {
         try {
           await downloadMp3(sessionId, false, "auto");
         } catch (e) {

@@ -90,6 +90,12 @@ export interface Session {
   originalError?: string;
   originalFileName?: string;
   originalMimeType?: string;
+  /** Google Drive MP3 upload state. */
+  driveMp3Status?: "idle" | "uploading" | "uploaded" | "failed" | "skipped";
+  driveMp3FileId?: string;
+  driveMp3FileName?: string;
+  driveMp3Error?: string;
+  driveMp3UploadedAt?: number;
 }
 
 export interface Part {
@@ -156,6 +162,15 @@ export interface AppSettings {
   downloadFolder?: string;
   /** Display name of the user-picked download directory (handle stored in IndexedDB). */
   customDownloadDirectoryName?: string;
+  /** Enable uploading MP3 to Google Drive. */
+  googleDriveEnabled?: boolean;
+  /** local_and_cloud = save locally + upload; cloud_only = auto upload without local save. */
+  googleDriveUploadMode?: "local_and_cloud" | "cloud_only";
+  /** Auto upload MP3 to Drive when stop recording and MP3 is ready. */
+  googleDriveAutoUploadOnStop?: boolean;
+  googleDriveFolderId?: string;
+  googleDriveFolderName?: string;
+  googleDriveAccountEmail?: string;
   /** Recording name builder (date / daily number / custom). */
   recordingName?: Partial<RecordingNameConfig>;
 }
@@ -173,7 +188,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoStartOnSound: true,
   autoStartOnLocalMediaTab: true,
   autoStartOnLocalMediaEnded: true,
-  downloadFolder: ""
+  downloadFolder: "",
+  googleDriveEnabled: false,
+  googleDriveUploadMode: "local_and_cloud",
+  googleDriveAutoUploadOnStop: true
 };
 
 export const id = () => crypto.randomUUID();

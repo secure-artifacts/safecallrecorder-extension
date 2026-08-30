@@ -12,6 +12,7 @@ import {
   storageSetDirect
 } from "./extension-storage";
 import { openHelpPage } from "./help-nav";
+import { handleGoogleDriveMessage } from "./google-drive/sw-handlers";
 
 let creating: Promise<void> | undefined;
 let openingDashboard: Promise<void> | undefined;
@@ -218,6 +219,20 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, reply) => {
     if (msg.type === MessageType.OpenHelp) {
       await openHelpPage(String(msg.payload?.hash || ""));
       return reply({ ok: true, requestId: msg.requestId });
+    }
+
+    if (
+      msg.type === MessageType.GoogleDriveGetStatus ||
+      msg.type === MessageType.GoogleDriveConnect ||
+      msg.type === MessageType.GoogleDriveDisconnect ||
+      msg.type === MessageType.GoogleDriveListFolders ||
+      msg.type === MessageType.GoogleDriveSetFolder ||
+      msg.type === MessageType.GoogleDriveCreateFolder ||
+      msg.type === MessageType.GoogleDriveEnsureDefaultFolder ||
+      msg.type === MessageType.GoogleDriveUploadMp3
+    ) {
+      const data = await handleGoogleDriveMessage(msg.type, msg.payload || {});
+      return reply({ ok: true, requestId: msg.requestId, data });
     }
 
     if (msg.type === MessageType.StartRecording) {

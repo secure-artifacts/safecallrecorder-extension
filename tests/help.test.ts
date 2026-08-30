@@ -35,6 +35,7 @@ describe("help system", () => {
       "name",
       "bitrate",
       "storage",
+      "google-drive",
       "history",
       "recovery",
       "faq",
@@ -50,7 +51,7 @@ describe("help system", () => {
     expect(html).toContain("data-help-src=\"help/img-dashboard.svg\"");
     expect(html).toContain("help/img-local-media.svg");
     expect(html).toContain("VoiceMeeter");
-    expect(html).toContain("本地保存，不会上传");
+    expect(html).toContain("默认本地保存");
     expect(html).toContain("64 kbps");
     expect(html).toContain("已安全保存");
     expect(html).toContain("录音名称怎么拼");
@@ -60,6 +61,9 @@ describe("help system", () => {
     expect(html).toContain("使用下载文件夹");
     expect(html).toContain("正常录完或异常中断");
     expect(html).toContain("继续录音和重新开一条");
+    expect(html).toContain("Google 云端上传");
+    expect(html).toContain("仅上传云端");
+    expect(html).toContain("Google Drive 连接失败");
     expect(html).toContain("导出备份");
     expect(html).toContain("导入备份");
     expect(html).toContain("播放列表");
@@ -94,12 +98,11 @@ describe("help system", () => {
   });
 
   it("exports help content version", () => {
-    expect(HELP_CONTENT_VERSION).toBe("1.3.1");
+    expect(HELP_CONTENT_VERSION).toBe("1.4.0");
   });
 
-  it("manifest does not add network host permissions for help", () => {
+  it("manifest includes Drive API host permission only for googleapis", () => {
     const manifest = JSON.parse(readFileSync(new URL("../public/manifest.json", import.meta.url), "utf8"));
-    expect(manifest.host_permissions || []).toEqual([]);
-    expect(JSON.stringify(manifest)).not.toContain("https://");
+    expect(manifest.host_permissions || []).toEqual(["https://www.googleapis.com/*"]);
   });
 });

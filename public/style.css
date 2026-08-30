@@ -577,6 +577,55 @@ input[type="text"]:focus, select:focus {
   padding: 1px 4px;
   border-radius: 4px;
 }
+.google-drive-card h2 { margin: 0 0 10px; font-size: 18px; }
+.google-drive-panel { margin-top: 8px; }
+.google-drive-actions, .google-drive-folder-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.google-drive-label {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-all;
+}
+.drive-folder-modal { max-width: 520px; }
+.drive-folder-list {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 10px 0;
+}
+.drive-folder-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+.drive-folder-item:last-child { border-bottom: 0; }
+.drive-folder-item:hover { background: #f8fafc; }
+.drive-folder-create-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.drive-folder-create-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
 .top-actions .settings-entry { white-space: nowrap; }
 .history-toolbar {
   display: flex;

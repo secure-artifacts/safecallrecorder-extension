@@ -34,10 +34,11 @@
         <a href="#name">10. 录音名称</a>
         <a href="#bitrate">11. 比特率怎么选择</a>
         <a href="#storage">12. 录音保存位置</a>
-        <a href="#history">13. 录音历史</a>
-        <a href="#recovery">14. 崩溃或停电</a>
-        <a href="#faq">15. 常见问题</a>
-        <a href="#privacy">16. 隐私说明</a>
+        <a href="#google-drive">13. Google 云端上传</a>
+        <a href="#history">14. 录音历史</a>
+        <a href="#recovery">15. 崩溃或停电</a>
+        <a href="#faq">16. 常见问题</a>
+        <a href="#privacy">17. 隐私说明</a>
       </nav>
 
       <main class="help-main">
@@ -56,7 +57,8 @@
             <li><strong>音浪监测</strong>：确认设备里真的有声音。</li>
             <li><strong>开始 / 停止录音</strong>：正式录音按钮。</li>
             <li><strong>下载保存路径</strong>：设置 MP3、原始录音和备份保存到哪里。</li>
-            <li><strong>录音历史</strong>：查看、导出、导入、继续录音、重新下载以前的录音。</li>
+            <li><strong>Google 云端上传</strong>（可选）：将 MP3 同步到你 Google Drive 中的文件夹。</li>
+            <li><strong>录音历史</strong>：查看、导出、导入、继续录音、上传云端、重新下载以前的录音。</li>
           </ol>
           <div class="callout ok">
             右上角 <strong>？ 使用说明</strong> 可随时回到本页；<strong>⚙ 设置</strong> 可调整自动录音、下载方式等。
@@ -453,10 +455,35 @@
           <p>若浏览器开启了「下载前询问每个文件的保存位置」，下载时仍会弹出另存为窗口（取决于浏览器设置）。</p>
         </section>
 
+        <section class="help-card" id="google-drive">
+          <h2>如何上传到 Google Drive？</h2>
+          <p class="help-lead">可选功能。启用后，MP3 可同步到你 Google 账号下的 Drive 文件夹；录音原始数据仍保存在本机。</p>
+          <h3>首次配置</h3>
+          <ol>
+            <li>在 Google Cloud Console 创建 Chrome 扩展 OAuth 客户端，启用 Drive API（详见项目中的 <code>GOOGLE_DRIVE_SETUP.md</code>）。</li>
+            <li>将客户端 ID 写入 <code>manifest.json</code> 的 <code>oauth2.client_id</code>，重新加载扩展。</li>
+            <li>在控制面板打开 <strong>Google 云端上传</strong>，勾选启用并 <strong>连接 Google 账号</strong>。</li>
+            <li>点 <strong>选择 Drive 文件夹</strong> 浏览并进入目标目录，再点 <strong>选择当前文件夹</strong>；或点 <strong>使用默认文件夹</strong> 自动创建 <code>SafeCallRecorder</code>。</li>
+          </ol>
+          <h3>上传方式</h3>
+          <ul>
+            <li><strong>保存本地 + 上传云端</strong>：停止录音后，MP3 既保存到本机下载文件夹，也上传到 Drive。</li>
+            <li><strong>仅上传云端</strong>：停止后 MP3 只上传 Drive，不自动保存 MP3 到本地下载文件夹（原始录音与历史仍在本机）。</li>
+          </ul>
+          <h3>自动与手动上传</h3>
+          <ul>
+            <li>勾选 <strong>停止录音后自动上传 MP3</strong>：MP3 在后台生成完成后自动上传。</li>
+            <li>在 <strong>录音历史</strong> 中，对已有 MP3 的记录点 <strong>上传云端</strong> 可手动上传。</li>
+          </ul>
+          <div class="callout warn">
+            上传到 Google Drive 需要网络。MP3 正在生成时，「上传云端」需等待生成完成。
+          </div>
+        </section>
+
         <section class="help-card" id="history">
           <h2>如何查看以前的录音？</h2>
           <p>完成和异常中断的录音都会出现在「录音历史」中。</p>
-          <p>每条记录可以：播放 MP3、下载当前 MP3、<strong>按任意音质重新导出 MP3</strong>、下载原始录音、<strong>继续录音</strong>、删除。</p>
+          <p>每条记录可以：播放 MP3、下载当前 MP3、<strong>按任意音质重新导出 MP3</strong>、下载原始录音、<strong>继续录音</strong>、<strong>上传云端</strong>、删除。</p>
 
           <h3>继续录音</h3>
           <p>无论录音是正常结束还是异常中断，只要历史里已有保存内容，都可以点 <strong>继续录音</strong>，在同一条历史里接着录。之前已写入本地的部分不会丢失，新录的内容会追加在同一条记录中。</p>
@@ -589,6 +616,14 @@
             <p>拖动条目左侧 ⠿ 可调整顺序，或用 ↑↓ 按钮移动。双击某条可从该条开始播放。</p>
           </details>
           <details>
+            <summary>Google Drive 连接失败怎么办？</summary>
+            <p>确认已在 manifest.json 填入正确的 OAuth 客户端 ID，且该 ID 绑定了当前扩展 ID。重新 build 并加载 dist 后，再点「连接 Google 账号」。详见 <code>GOOGLE_DRIVE_SETUP.md</code>。</p>
+          </details>
+          <details>
+            <summary>「仅上传云端」还会在本机留录音吗？</summary>
+            <p>会。录音仍保存在插件历史（IndexedDB）中，只是停止后<strong>不会自动把 MP3 下载</strong>到浏览器下载文件夹。你仍可在历史里播放、重新导出或手动下载。启用后会自动把 MP3 上传到你选的 Drive 文件夹。</p>
+          </details>
+          <details>
             <summary>无痕模式可以录音吗？</summary>
             <p>不建议在无痕模式录制重要内容。无痕窗口关闭后，本地录音数据可能被删除。</p>
           </details>
@@ -597,21 +632,24 @@
         <section class="help-card" id="privacy">
           <h2>录音是否会上传？</h2>
           <div class="callout ok">
-            <strong>本地保存，不会上传</strong>
+            <strong>默认本地保存，不上传</strong>
             <ul>
-              <li>录音只保存在你的本机</li>
-              <li>不上传到服务器、不发给第三方</li>
+              <li>录音默认只保存在你的本机浏览器存储中</li>
+              <li>不上传到插件运营者的服务器、不发给第三方</li>
               <li>不使用 AI 服务</li>
               <li>不读取聊天内容、密码、Cookie、账号令牌</li>
               <li>不上传声音设备列表</li>
             </ul>
           </div>
           <div class="callout warn">
+            <strong>可选 Google Drive 上传</strong>：若你在控制面板中启用并连接 Google 账号，MP3 会上传到你<strong>自己</strong> Google Drive 里选择的文件夹。此上传由 Google API 完成，插件不会把文件发到其他服务器。
+          </div>
+          <div class="callout warn">
             卸载插件可能删除插件内部保存的历史录音。卸载前请先下载需要保留的文件。
           </div>
         </section>
 
-        <p class="help-footer" id="helpVersion">使用说明版本：1.3.1</p>
+        <p class="help-footer" id="helpVersion">使用说明版本：1.4.0</p>
       </main>
     </div>
   </div>

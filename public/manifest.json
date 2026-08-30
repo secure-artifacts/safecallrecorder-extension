@@ -1,9 +1,26 @@
 {
   "manifest_version": 3,
   "name": "SafeCallRecorder",
-  "version": "1.3.1",
-  "description": "本机保存的网页和声音输入设备录音工具。",
-  "permissions": ["tabCapture", "offscreen", "storage", "unlimitedStorage", "downloads", "activeTab", "tabs"],
+  "version": "1.4.0",
+  "description": "本机保存的网页和声音输入设备录音工具，可选上传到 Google Drive。",
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "storage",
+    "unlimitedStorage",
+    "downloads",
+    "activeTab",
+    "tabs",
+    "identity"
+  ],
+  "host_permissions": ["https://www.googleapis.com/*"],
+  "oauth2": {
+    "client_id": "CONFIGURE_IN_GOOGLE_CLOUD.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.file",
+      "https://www.googleapis.com/auth/drive.readonly"
+    ]
+  },
   "background": { "service_worker": "service-worker.js", "type": "module" },
   "action": {
     "default_title": "打开 SafeCallRecorder",
