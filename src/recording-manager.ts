@@ -1,4 +1,5 @@
 import { openInput } from "./device-manager";
+import { canContinueRecording } from "./recording-continue";
 import { storage } from "./storage-manager";
 import { StreamLevelMonitor, type AudioLevelUpdate } from "./stream-level-monitor";
 import { captureAudioBitsPerSecond, resolveBitrate } from "./bitrate-presets";
@@ -44,8 +45,17 @@ export class RecordingManager {
     mixed?: boolean;
     sessionId?: string;
     displayName?: string;
+    continue?: boolean;
   }) {
-    // Simplified product: always record selected audioinput device.
+    if (input.continue && input.sessionId) {
+      return this.continueRecording({
+        sessionId: input.sessionId,
+        deviceId: input.deviceId || "",
+        deviceLabel: input.deviceLabel,
+        bitrate: input.bitrate
+      });
+    }
+
     const mode: SourceMode = "device";
     if (!input.deviceId) throw new Error("请选择声音设备");
 
@@ -66,33 +76,14 @@ export class RecordingManager {
       selectedDeviceId: input.deviceId,
       selectedDeviceLabel: input.deviceLabel,
       safeDurationMs: 0,
-      recoveryCount: input.sessionId ? 1 : 0,
+      recoveryCount: 0,
       bitrate: targetBitrate,
       mixed: false
     };
     await storage.saveSession(session);
     const streams: MediaStream[] = [];
     try {
-      const d = await openInput(input.deviceId);
-      streams.push(d);
-      const active: Active = {
-        session,
-        recorders: [],
-        streams,
-        parts: [],
-        monitors: [],
-        latestLevels: new Map(),
-        wallClockStarted: Date.now(),
-        pendingWrites: new Set()
-      };
-      this.active.set(session.id, active);
-      await this.recordTrack(active, "selected_device", d, input.deviceLabel || "声音设备");
-      session.status = "recording";
-      session.recordingStatus = "recording";
-      session.historyStatus = "recording";
-      await storage.saveSession(session);
-      mirrorLiveSession(session.id, session);
-      return session;
+      return await this.beginCapture(session, input.deviceId, input.deviceLabel || "声音设备", streams);
     } catch (e) {
       session.status = "error";
       session.recordingStatus = "error";
@@ -103,6 +94,77 @@ export class RecordingManager {
       this.active.delete(session.id);
       throw e;
     }
+  }
+
+  async continueRecording(input: {
+    sessionId: string;
+    deviceId: string;
+    deviceLabel?: string;
+    bitrate?: number;
+  }) {
+    if (!input.deviceId) throw new Error("请选择声音设备");
+    const session = await storage.getSession(input.sessionId);
+    if (!session) throw new Error("找不到该录音");
+    if (!canContinueRecording(session)) {
+      throw new Error("该录音无法继续，需要已有保存内容且当前不在录音中");
+    }
+
+    await storage.deleteMp3ForSession(input.sessionId);
+
+    session.status = "starting";
+    session.recordingStatus = "starting";
+    session.historyStatus = "recording";
+    session.originalStatus = "available";
+    session.mp3Status = "idle";
+    session.hasMp3 = false;
+    session.mp3Error = undefined;
+    session.originalError = undefined;
+    session.interruptionReason = undefined;
+    session.endedAt = undefined;
+    session.durationMs = undefined;
+    session.fileSize = undefined;
+    session.recoveryCount = (session.recoveryCount || 0) + 1;
+    session.selectedDeviceId = input.deviceId;
+    session.selectedDeviceLabel = input.deviceLabel;
+    if (input.bitrate != null) session.bitrate = resolveBitrate(input.bitrate);
+
+    await storage.saveSession(session);
+    const streams: MediaStream[] = [];
+    try {
+      return await this.beginCapture(session, input.deviceId, input.deviceLabel || "声音设备", streams);
+    } catch (e) {
+      session.status = "interrupted";
+      session.recordingStatus = "interrupted";
+      session.historyStatus = session.safeDurationMs > 0 ? "partial" : "interrupted";
+      session.interruptionReason = e instanceof Error ? e.message : String(e);
+      await storage.saveSession(session);
+      streams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+      this.active.delete(session.id);
+      throw e;
+    }
+  }
+
+  private async beginCapture(session: Session, deviceId: string, deviceLabel: string, streams: MediaStream[]) {
+    const d = await openInput(deviceId);
+    streams.push(d);
+    const active: Active = {
+      session,
+      recorders: [],
+      streams,
+      parts: [],
+      monitors: [],
+      latestLevels: new Map(),
+      wallClockStarted: Date.now() - (session.safeDurationMs || 0),
+      pendingWrites: new Set()
+    };
+    this.active.set(session.id, active);
+    await this.recordTrack(active, "selected_device", d, deviceLabel);
+    session.status = "recording";
+    session.recordingStatus = "recording";
+    session.historyStatus = "recording";
+    await storage.saveSession(session);
+    mirrorLiveSession(session.id, session);
+    return session;
   }
 
   private async recordTrack(
@@ -124,7 +186,6 @@ export class RecordingManager {
     active.parts.push(part);
     const rec = new MediaRecorder(stream, {
       mimeType: part.mimeType || undefined,
-      // Capture at ≥ target (and ≥ 96 kbps floor) so low MP3 targets are not baked into lossy WebM.
       audioBitsPerSecond: captureAudioBitsPerSecond(active.session.bitrate)
     });
     let index = 0;
@@ -221,7 +282,6 @@ export class RecordingManager {
     const a = this.active.get(sessionId);
     if (!a) return undefined;
     a.monitors.forEach((m) => m.stop());
-    // Request final timeslice, then stop; wait for last chunk IDB writes.
     for (const r of a.recorders) {
       try {
         if (r.state === "recording" || r.state === "paused") r.requestData();
@@ -259,7 +319,6 @@ export class RecordingManager {
       a.session.originalStatus = a.session.safeDurationMs > 0 ? "available" : "missing";
       a.session.mp3Status = "idle";
     } else {
-      // Recording is finalized; MP3 is NOT required for completion.
       a.session.status = "completed";
       a.session.recordingStatus = "completed";
       a.session.originalStatus = "available";

@@ -59,7 +59,6 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
       const session = await recordings.start(p as never);
       return reply({ ok: true, requestId: req.requestId, data: session });
     }
-
     if (req.type === MessageType.GetState) {
       const active = recordings.status();
       const sessions = await recoverIncomplete(active.map((s) => s.id));

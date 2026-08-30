@@ -73,6 +73,7 @@ import {
   readInputFromStream,
   type InputDeviceInfo
 } from "./device-verify";
+import { canContinueRecording } from "./recording-continue";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const fmt = (ms: number) => {
@@ -1354,9 +1355,9 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
     } else if (mp3Busy) {
       help.textContent = "长录音转换可能需要几分钟。你可以继续使用插件或关闭此页面。";
     } else if (s.historyStatus === "interrupted" || s.historyStatus === "partial") {
-      help.textContent = "上次异常中断，已保存部分仍然存在。";
+      help.textContent = "上次异常中断，已保存部分仍然存在。可点「继续录音」接着录，或下载已有内容。";
     } else if (!mp3Busy && originalOk) {
-      help.textContent = "可选择任意音质导出 MP3。原始录音仍保留，不会被覆盖。";
+      help.textContent = "可选择任意音质导出 MP3。也可点「继续录音」在同一条记录里接着录。";
     } else {
       help.textContent = "";
     }
@@ -1398,6 +1399,14 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
         regeneratingSessions.delete(s.id);
       }
     };
+
+    const canContinue = canContinueRecording(s) && !mp3Busy;
+
+    if (canContinue) {
+      add("继续录音", "secondary", () => {
+        void continueRecordingFromHistory(s.id);
+      });
+    }
 
     // Original download always available when data exists.
     if (originalOk) {
@@ -1651,6 +1660,66 @@ async function refresh() {
     applyHistoryRecords(reconciled, data.active.map((a) => a.id));
   } catch {
     /* keep UI */
+  }
+}
+
+async function continueRecordingFromHistory(sessionId: string) {
+  if (busy || recording) return;
+  const deviceId = $<HTMLSelectElement>("device").value;
+  if (!deviceId) {
+    setStatus("请先选择声音设备");
+    return;
+  }
+  if (!devices.some((d) => d.deviceId === deviceId)) {
+    setStatus("所选设备已断开，请重新选择。");
+    await refreshDevices();
+    return;
+  }
+  busy = true;
+  stopLocalMediaPlayback();
+  $<HTMLButtonElement>("start").disabled = true;
+  updateLocalMediaUi();
+  setStatus("正在恢复录音……");
+  try {
+    await stopPreview();
+    setWaveformMode("recording");
+    await new Promise((r) => setTimeout(r, 120));
+    const estimate = await navigator.storage?.estimate?.();
+    if (estimate?.quota && estimate.usage != null && estimate.usage / estimate.quota > 0.92) {
+      throw new Error("本地存储空间不足，请先删除旧录音。");
+    }
+    const deviceLabel = devices.find((d) => d.deviceId === deviceId)?.label || "声音设备";
+    const session = (await ask(MessageType.StartRecording, {
+      continue: true,
+      sessionId,
+      deviceId,
+      deviceLabel,
+      bitrate: currentBitrate()
+    })) as Session;
+    selectedSession = session.id;
+    recording = true;
+    setWaveformMode("recording", session.id);
+    startedAt = Date.now() - (session.safeDurationMs || 0);
+    $<HTMLButtonElement>("stop").disabled = false;
+    $<HTMLButtonElement>("start").textContent = "开始录音";
+    setStatus(`继续录音中（已保存 ${fmt(session.safeDurationMs || 0)}）`);
+    await ask(MessageType.SubscribeLevels);
+    if (elapsedTimer) clearInterval(elapsedTimer);
+    elapsedTimer = setInterval(() => {
+      $("elapsed").textContent = fmt(Date.now() - startedAt);
+      updateBitrateCard();
+    }, 250);
+    await persistDefaultDevice();
+    await reloadHistoryVerified("after_continue_start");
+  } catch (e) {
+    recording = false;
+    selectedSession = undefined;
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+    $<HTMLButtonElement>("start").disabled = !devices.length;
+    await startPreview();
+  } finally {
+    busy = false;
+    updateLocalMediaUi();
   }
 }
 

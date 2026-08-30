@@ -58,6 +58,8 @@ describe("help system", () => {
     expect(html).toContain("一轮最大值");
     expect(html).toContain("img-rec-name.svg");
     expect(html).toContain("使用下载文件夹");
+    expect(html).toContain("正常录完或异常中断");
+    expect(html).toContain("继续录音和重新开一条");
     expect(html).toContain("导出备份");
     expect(html).toContain("导入备份");
     expect(html).toContain("播放列表");
@@ -92,7 +94,7 @@ describe("help system", () => {
   });
 
   it("exports help content version", () => {
-    expect(HELP_CONTENT_VERSION).toBe("1.3.0");
+    expect(HELP_CONTENT_VERSION).toBe("1.3.1");
   });
 
   it("manifest does not add network host permissions for help", () => {

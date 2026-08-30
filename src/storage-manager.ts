@@ -95,6 +95,23 @@ export class StorageManager {
    * 1) MP3 cache  2) chunks  3) parts  4) session metadata/index last
    * Never remove the session index before underlying blobs succeed.
    */
+  async deleteMp3ForSession(sessionId: string) {
+    const mp3s = await this.byIndex<Mp3File>("mp3Files", "sessionId", sessionId);
+    if (!mp3s.length) return;
+    const d = await this.open();
+    await new Promise<void>((ok, no) => {
+      const t = d.transaction("mp3Files", "readwrite");
+      for (const m of mp3s) t.objectStore("mp3Files").delete(m.id);
+      t.oncomplete = () => ok();
+      t.onerror = () => no(t.error);
+    });
+  }
+
+  async getSession(sessionId: string): Promise<Session | undefined> {
+    const sessions = await this.all<Session>("sessions");
+    return sessions.find((s) => s.id === sessionId);
+  }
+
   async removeSession(id: string) {
     const d = await this.open();
     const parts = await this.byIndex<Part>("parts", "sessionId", id);
