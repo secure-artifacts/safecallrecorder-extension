@@ -79,7 +79,7 @@
           <button type="button" id="recNameProfileRename" class="btn outline small">重命名</button>
           <button type="button" id="recNameProfileDelete" class="btn outline small danger-text">删除</button>
         </div>
-        <p class="hint rec-name-profiles-hint">可保存多套命名规则；开始录音时用当前方案。历史记录导出时可另选方案，文件名按所选方案与录音开始日期生成。</p>
+        <p class="hint rec-name-profiles-hint">可保存多套命名规则；开始录音与历史导出均使用当前选中的方案，文件名按该方案与录音开始日期生成。</p>
         <div class="rec-name-summary">
           <div class="rec-name-summary-main">
             <span class="rec-name-preview-label">录音名称</span>
@@ -233,7 +233,7 @@
         <span>启用 Google Drive 上传</span>
         <input type="checkbox" id="googleDriveEnabled">
       </label>
-      <div class="google-drive-setup-guide">
+      <div class="google-drive-setup-guide hidden" id="googleDriveSetupGuide">
         <p class="hint google-drive-auth-hint"><strong>创建 OAuth 客户端时会用到（请先记住）：</strong><br>扩展 ID：<code id="googleDriveExtensionId">—</code><br>Web 应用重定向 URI：<code id="googleDriveRedirectUri">—</code><br><span class="google-drive-auth-note">扩展 ID 与 <code>chrome://extensions</code> 页面显示的一致；重定向 URI 仅在选择「Web 应用」类型时需要，请完整复制（含末尾 <code>/</code>）。</span></p>
         <label class="google-drive-client-row">
           <span>OAuth 客户端 ID</span>

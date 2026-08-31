@@ -136,7 +136,6 @@ let playingAudio:
   | undefined;
 /** Remembers the export-bitrate dropdown choice across history refreshes. */
 const exportBitrateChoice = new Map<string, number>();
-const exportNameProfileChoice = new Map<string, string>();
 let lastHistoryListKey = "";
 let historyExportUiHoldUntil = 0;
 
@@ -875,38 +874,9 @@ function syncRecordingNameProfilesUi() {
   applyRecordingNameConfigToUi(active.config);
 }
 
-function chosenExportNameProfileId(session: Session): string {
-  const { profiles, activeId } = normalizeRecordingNameProfiles(settings);
-  const picked = exportNameProfileChoice.get(session.id);
-  if (picked && profiles.some((p) => p.id === picked)) return picked;
-  return activeId;
-}
-
-function exportDisplayNameForSession(session: Session, profileId?: string): string {
-  const profile = findRecordingNameProfile(settings, profileId ?? chosenExportNameProfileId(session));
+function exportDisplayNameForSession(session: Session): string {
+  const profile = findRecordingNameProfile(settings, settings.activeRecordingNameProfileId);
   return buildSessionRecordingName(profile, session.startedAt);
-}
-
-function buildHistoryNameProfileSelect(session: Session): HTMLSelectElement {
-  const { profiles } = normalizeRecordingNameProfiles(settings);
-  const sel = document.createElement("select");
-  sel.className = "history-export-name";
-  sel.setAttribute("aria-label", "命名方案");
-  const current = chosenExportNameProfileId(session);
-  for (const p of profiles) {
-    sel.append(new Option(p.label, p.id, false, p.id === current));
-  }
-  sel.onmousedown = () => holdHistoryExportUi();
-  sel.onfocus = () => {
-    holdHistoryExportUi();
-    exportNameProfileChoice.set(session.id, sel.value);
-  };
-  sel.onchange = () => {
-    exportNameProfileChoice.set(session.id, sel.value);
-    holdHistoryExportUi(800);
-  };
-  sel.onblur = () => holdHistoryExportUi(400);
-  return sel;
 }
 
 async function tryAutoStartRecording(
@@ -1052,7 +1022,6 @@ function removeSessionsFromUi(sessionIds: string[]) {
   for (const id of sessionIds) {
     stopPlaybackIfSession(id);
     exportBitrateChoice.delete(id);
-    exportNameProfileChoice.delete(id);
   }
   historyRecords = historyRecords.filter((r) => !removed.has(r.id));
   console.info("[HistoryDelete]", {
@@ -1691,10 +1660,6 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
     if (originalOk && !mp3Busy) {
       const exportRow = document.createElement("div");
       exportRow.className = "history-export";
-      const nameLabel = document.createElement("label");
-      nameLabel.className = "history-export-label";
-      nameLabel.textContent = "命名方案";
-      const nameSel = buildHistoryNameProfileSelect(s);
       const label = document.createElement("label");
       label.className = "history-export-label";
       label.textContent = "导出音质";
@@ -1729,7 +1694,6 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
       exportBtn.textContent = "导出MP3";
       exportBtn.disabled = isDeleting;
       exportBtn.onclick = () => {
-        exportNameProfileChoice.set(s.id, nameSel.value);
         const exportName = exportDisplayNameForSession(s);
         const target = resolveBitrate(Number(sel.value) || chosenExportBitrate(s));
         exportBitrateChoice.set(s.id, target);
@@ -1760,7 +1724,7 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
           label: `正在按 ${Math.round(target / 1000)} kbps 导出 MP3`
         });
       };
-      exportRow.append(nameLabel, nameSel, label, sel, sizeEl, exportBtn);
+      exportRow.append(label, sel, sizeEl, exportBtn);
       actions.append(exportRow);
     } else if (!originalOk && !canDownloadMp3 && !mp3Busy && s.mp3Status !== "skipped") {
       add("重新生成MP3", "download", () =>
@@ -2147,13 +2111,16 @@ function syncGoogleDriveSettingsUi() {
   const auto = $<HTMLInputElement>("googleDriveAutoUploadOnStop");
   if (auto) auto.checked = settings.googleDriveAutoUploadOnStop !== false;
   const configured = isGoogleDriveConfigured(settings);
+  const driveOn = settings.googleDriveEnabled === true;
+  const setupGuide = $("googleDriveSetupGuide");
+  if (setupGuide) setupGuide.classList.toggle("hidden", !driveOn);
   const setupHint = $("googleDriveSetupHint");
   if (setupHint) {
     setupHint.textContent = configured ? "" : googleDriveSetupHint();
-    setupHint.classList.toggle("hidden", configured);
+    setupHint.classList.toggle("hidden", !driveOn || configured);
   }
   const panel = $("googleDrivePanel");
-  if (panel) panel.classList.toggle("hidden", !settings.googleDriveEnabled);
+  if (panel) panel.classList.toggle("hidden", !driveOn);
   const account = $("googleDriveAccountLabel");
   if (account) {
     account.textContent = settings.googleDriveAccountEmail
