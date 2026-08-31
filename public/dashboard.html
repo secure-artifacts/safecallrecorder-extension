@@ -223,14 +223,152 @@
         <span>启用 Google Drive 上传</span>
         <input type="checkbox" id="googleDriveEnabled">
       </label>
-      <p id="googleDriveSetupHint" class="hint hidden"></p>
-      <div id="googleDrivePanel" class="google-drive-panel hidden">
+      <div class="google-drive-setup-guide">
+        <p class="hint google-drive-setup-lead"><strong>首次使用？</strong>需要先用 Google 账号在 Google Cloud 免费创建 OAuth 客户端（约 5–10 分钟，只需配置一次）。<strong>以下按钮名称均按 Google 中文界面书写</strong>，请对照你屏幕上看到的文字点击。</p>
+        <p class="hint google-drive-auth-hint"><strong>创建 OAuth 客户端时会用到（请先记住）：</strong><br>扩展 ID：<code id="googleDriveExtensionId">—</code><br>Web 应用重定向 URI：<code id="googleDriveRedirectUri">—</code><br><span class="google-drive-auth-note">扩展 ID 与 <code>chrome://extensions</code> 页面显示的一致；重定向 URI 仅在选择「Web 应用」类型时需要，请完整复制（含末尾 <code>/</code>）。</span></p>
         <label class="google-drive-client-row">
           <span>OAuth 客户端 ID</span>
-          <input type="text" id="googleDriveClientId" class="google-drive-input" placeholder="123456789.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+          <input type="text" id="googleDriveClientId" class="google-drive-input" placeholder="123456789-xxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
         </label>
-        <p class="hint google-drive-auth-hint">扩展 ID：<code id="googleDriveExtensionId">—</code> · 重定向 URI：<code id="googleDriveRedirectUri">—</code></p>
-        <p class="hint">在 Google Cloud 创建 OAuth 客户端并启用 Drive API。Chrome 应用类型填扩展 ID；Web 应用类型将上方重定向 URI 加入授权列表。</p>
+        <p class="hint">在 Google Cloud 创建客户端后，把生成的客户端 ID 粘贴到上方输入框。</p>
+
+        <details class="google-drive-setup-step" open>
+          <summary>步骤 1：创建 Google Cloud 项目（没有项目就无法继续）</summary>
+          <div class="google-drive-setup-body">
+            <p class="google-drive-where"><strong>推荐：直接打开新建项目页面</strong>（不用自己找按钮）</p>
+            <ol class="google-drive-setup-sublist">
+              <li>先登录 Google 账号，然后点击：<a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener noreferrer"><strong>→ 打开「新建项目」页面</strong></a></li>
+              <li>在 <strong>项目名称</strong> 输入框填：<code>SafeCallRecorder</code>（或任意名称）</li>
+              <li><strong>位置</strong> 保持默认「无组织」即可，不用改</li>
+              <li>点页面上的 <strong>创建</strong> 按钮（通常在输入框下方或右下角）</li>
+              <li>等待约 10–30 秒，浏览器右上角可能弹出「项目已创建」通知</li>
+            </ol>
+            <p class="google-drive-where"><strong>若你想手动找「新建项目」按钮，按这个路径：</strong></p>
+            <ol class="google-drive-setup-sublist">
+              <li>打开 <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud 控制台首页</a></li>
+              <li>看页面<strong>最顶上一行</strong>：左边是 <strong>☰</strong> 菜单，旁边是 <strong>Google Cloud</strong></li>
+              <li><strong>Google Cloud</strong> 右边是 <strong>项目下拉框</strong>（可能显示项目名，或「选择项目」）→ <strong>点它</strong></li>
+              <li>弹出「选择项目」窗口 → 看窗口<strong>右上角</strong>的 <strong>新建项目</strong> 按钮（有时在窗口顶部「新建项目」标签页）→ <strong>点它</strong></li>
+              <li>填写项目名称 → 点 <strong>创建</strong></li>
+            </ol>
+            <p class="google-drive-where google-drive-where-warn"><strong>找不到「新建项目」？</strong>
+              ① 确认已用个人 Google 账号登录（公司账号可能被管理员禁止建项目）；
+              ② 直接用上方<strong>「打开新建项目页面」链接</strong>；
+              ③ 若列表里已有项目，也可不新建，在「选择项目」窗口里<strong>点选已有项目</strong>后继续步骤 2。</p>
+            <p class="google-drive-where"><strong>创建后必做：</strong>再看一次页面<strong>顶部项目下拉框</strong>，确认显示的是你刚建的项目名（有时不会自动切换，需手动点选）。</p>
+          </div>
+        </details>
+
+        <details class="google-drive-setup-step">
+          <summary>步骤 2：配置 OAuth 同意屏幕（左侧菜单「Google Auth Platform」）</summary>
+          <div class="google-drive-setup-body">
+            <p class="google-drive-where"><strong>你会看到的左侧菜单（中文）：</strong>概览 · 品牌塑造 · <strong>目标对象</strong> · <strong>客户端</strong> · 数据访问 · 验证中心 · 设置</p>
+            <ol class="google-drive-setup-sublist">
+              <li>点击：<a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer"><strong>→ 打开 OAuth 同意屏幕</strong></a></li>
+              <li>确认页面<strong>顶部</strong>当前项目是你刚创建的项目（不对就先回步骤 1 切换）</li>
+              <li>首次进入时，在 <strong>概览</strong> 页点 <strong>开始</strong> 或 <strong>配置同意屏幕</strong></li>
+              <li>点左侧 <strong>目标对象</strong>（你截图里那一项）：
+                <ul>
+                  <li>个人 Gmail：选 <strong>外部</strong>（<strong>内部</strong> 是灰色不可点 → 正常，需要公司 Workspace 账号）</li>
+                  <li>选好后点 <strong>创建</strong> 或 <strong>保存</strong></li>
+                </ul>
+              </li>
+              <li class="google-drive-setup-callout-li">
+                <p class="google-drive-where google-drive-where-warn"><strong>只想自己用、不想给别人用？</strong>
+                  ① 在 <strong>概览</strong> 页确认发布状态是 <strong>测试中</strong>，<strong>不要</strong>点 <strong>发布应用</strong>；
+                  ② 在 <strong>目标对象</strong> 页的 <strong>测试用户</strong> 区域，<strong>只添加你自己的 Gmail</strong>，不要加别人。这样只有你能完成 Google 授权。</p>
+              </li>
+              <li>点左侧 <strong>品牌塑造</strong>，填写：
+                <ul>
+                  <li><strong>应用名称</strong>：<code>SafeCallRecorder</code></li>
+                  <li><strong>用户支持邮箱</strong>：选你的 Gmail</li>
+                  <li><strong>开发者联系信息</strong>：填你的 Gmail</li>
+                  <li>点 <strong>保存并继续</strong></li>
+                </ul>
+              </li>
+              <li>点左侧 <strong>数据访问</strong>：不用添加范围，直接点 <strong>保存并继续</strong></li>
+              <li>回到 <strong>目标对象</strong>，找到 <strong>测试用户</strong>：
+                <ul>
+                  <li>点 <strong>添加用户</strong>（或 <strong>+ 添加用户</strong>）</li>
+                  <li>输入你稍后用来「连接 Google 账号」的 Gmail</li>
+                  <li>点 <strong>添加</strong> → <strong>保存</strong></li>
+                </ul>
+              </li>
+              <li>点左侧 <strong>概览</strong>，确认 <strong>发布状态</strong> 为 <strong>测试中</strong></li>
+            </ol>
+            <p class="google-drive-where"><strong>若左侧是旧版菜单：</strong>☰ → <strong>API 和服务</strong> → <strong>OAuth 同意屏幕</strong>，按钮同样是「外部」「保存并继续」「添加用户」。</p>
+          </div>
+        </details>
+
+        <details class="google-drive-setup-step">
+          <summary>步骤 3：启用 Google Drive API</summary>
+          <div class="google-drive-setup-body">
+            <ol class="google-drive-setup-sublist">
+              <li>点击：<a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener noreferrer"><strong>→ 打开 Google Drive API 页面</strong></a></li>
+              <li>确认页面顶部当前项目名正确</li>
+              <li>看页面中间的大按钮：
+                <ul>
+                  <li>未启用：蓝色 <strong>启用</strong> → 点它</li>
+                  <li>已启用：显示 <strong>管理</strong> → 说明已完成，继续下一步</li>
+                </ul>
+              </li>
+            </ol>
+            <p class="google-drive-where"><strong>手动路径：</strong>☰ → <strong>API 和服务</strong> → <strong>库</strong> → 搜索 <code>Google Drive API</code> → 进入 → 点 <strong>启用</strong></p>
+          </div>
+        </details>
+
+        <details class="google-drive-setup-step">
+          <summary>步骤 4A：创建 OAuth 客户端（推荐 · Chrome 扩展程序）</summary>
+          <div class="google-drive-setup-body">
+            <p class="google-drive-where"><strong>新版界面（左侧有「客户端」菜单）：</strong></p>
+            <ol class="google-drive-setup-sublist">
+              <li>打开：<a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"><strong>→ 凭据 / 客户端页面</strong></a></li>
+              <li>点左侧 <strong>客户端</strong></li>
+              <li>点 <strong>创建客户端</strong>（或页面顶部 <strong>+ 创建客户端</strong>）</li>
+              <li><strong>应用类型</strong> 选 <strong>Chrome 扩展程序</strong>（或「Chrome 应用」）</li>
+              <li><strong>名称</strong> 填 <code>SafeCallRecorder</code></li>
+              <li><strong>扩展 ID</strong>（或「项目 ID」）粘贴本页<strong>最上方</strong>显示的扩展 ID（整段复制，不要有空格）</li>
+              <li>点 <strong>创建</strong></li>
+              <li>弹出小窗显示 <strong>客户端 ID</strong>（以 <code>.apps.googleusercontent.com</code> 结尾）→ 复制</li>
+              <li>粘贴到本页顶部 <strong>OAuth 客户端 ID</strong> 输入框，点击别处保存</li>
+            </ol>
+            <p class="google-drive-where"><strong>旧版界面：</strong>☰ → <strong>API 和服务</strong> → <strong>凭据</strong> → <strong>创建凭据</strong> → <strong>OAuth 客户端 ID</strong> → 同上填写。</p>
+            <p class="google-drive-where">若「OAuth 客户端 ID」是灰色不可点，说明步骤 2 未完成，回去配置 <strong>目标对象</strong> 和 <strong>品牌塑造</strong>。</p>
+          </div>
+        </details>
+
+        <details class="google-drive-setup-step">
+          <summary>步骤 4B：创建 OAuth 客户端（备选 · 没有 Chrome 扩展类型时）</summary>
+          <div class="google-drive-setup-body">
+            <ol class="google-drive-setup-sublist">
+              <li>左侧 <strong>客户端</strong> → <strong>创建客户端</strong>（或 ☰ → <strong>API 和服务</strong> → <strong>凭据</strong> → <strong>创建凭据</strong>）</li>
+              <li><strong>应用类型</strong> 选 <strong>Web 应用</strong></li>
+              <li><strong>名称</strong> 填 <code>SafeCallRecorder</code></li>
+              <li><strong>已授权的重定向 URI</strong> → 点 <strong>添加 URI</strong></li>
+              <li>粘贴本页最上方的 <strong>Web 应用重定向 URI</strong>（含 <code>https://</code> 和末尾 <code>/</code>）</li>
+              <li>点 <strong>创建</strong> → 复制 <strong>客户端 ID</strong> → 粘贴到本页顶部输入框</li>
+            </ol>
+          </div>
+        </details>
+
+        <details class="google-drive-setup-step">
+          <summary>步骤 5：回到本插件，连接 Google 并开始上传</summary>
+          <div class="google-drive-setup-body">
+            <ol class="google-drive-setup-sublist">
+              <li>确认本页顶部 <strong>OAuth 客户端 ID</strong> 已填写（粘贴后点击别处保存）</li>
+              <li>勾选 <strong>启用 Google Drive 上传</strong></li>
+              <li>点 <strong>连接 Google 账号</strong></li>
+              <li>在 Google 弹出窗口：选账号 → <strong>继续</strong> → <strong>允许</strong>（若提示「Google 尚未验证此应用」，点 <strong>高级</strong> → <strong>前往 SafeCallRecorder（不安全）</strong>，这是你自建的应用）</li>
+              <li>点 <strong>选择 Drive 文件夹</strong> → 进入目标目录 → <strong>选择当前文件夹</strong>；或点 <strong>使用默认文件夹</strong></li>
+              <li>选上传方式；保持 <strong>停止录音后自动上传 MP3</strong> 勾选即可</li>
+            </ol>
+          </div>
+        </details>
+
+        <p class="hint google-drive-setup-footer">仍有问题？打开插件帮助页「Google 云端上传」。常见错误：重定向 URI 不匹配 → 检查 Web 应用 URI 是否完整；访问遭拒 → 在 <strong>目标对象</strong> 的 <strong>测试用户</strong> 里添加你的 Gmail，且发布状态保持 <strong>测试中</strong>。</p>
+      </div>
+      <p id="googleDriveSetupHint" class="hint hidden"></p>
+      <div id="googleDrivePanel" class="google-drive-panel hidden">
         <div class="google-drive-actions">
           <button type="button" id="googleDriveConnect" class="btn secondary small">连接 Google 账号</button>
           <button type="button" id="googleDriveDisconnect" class="btn outline small hidden">断开连接</button>

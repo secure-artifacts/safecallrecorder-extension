@@ -145,11 +145,15 @@ export async function verifyMp3Persisted(sessionId: string): Promise<boolean> {
   return result.ok && result.size > 64;
 }
 
-export async function reconcileSessionMp3Status(session: Session): Promise<Session> {
+export async function reconcileSessionMp3Status(
+  session: Session,
+  livingIds?: ReadonlySet<string>
+): Promise<Session> {
   // Only flag missing MP3 when we previously claimed success.
   if (!session.hasMp3) return session;
   // Never resurrect a session that was already deleted from IndexedDB.
-  const living = (await storage.all<Session>("sessions")).some((s) => s.id === session.id);
+  const living =
+    livingIds != null ? livingIds.has(session.id) : (await storage.all<Session>("sessions")).some((s) => s.id === session.id);
   if (!living) return session;
   const file = await storage.getMp3(session.id);
   if (!file?.blob || file.blob.size <= 0) {

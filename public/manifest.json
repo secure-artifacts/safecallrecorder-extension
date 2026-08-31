@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SafeCallRecorder",
-  "version": "1.4.2",
+  "version": "1.4.4",
   "description": "本机保存的网页和声音输入设备录音工具，可选上传到 Google Drive。",
   "permissions": [
     "tabCapture",

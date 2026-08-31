@@ -79,7 +79,8 @@ describe("local media player", () => {
     expect(dash).toContain("local_media_ended");
     expect(dash).toContain("playLocalMediaPlaylist");
     expect(dash).toContain("localMediaDragId");
-    expect(dash).toContain("ensurePreviewMonitor");
+    expect(dash).toContain("deferHistorySync");
+    expect(dash).toContain("localMediaSessionActive");
     expect(dash).toContain("reorderLocalMediaPlaylistItem");
     expect(DEFAULT_SETTINGS.autoStartOnLocalMediaEnded).toBe(true);
   });

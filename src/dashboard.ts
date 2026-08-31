@@ -82,6 +82,13 @@ import {
   parseGoogleDriveConfig,
   serializeGoogleDriveConfig
 } from "./google-drive/config-backup";
+import {
+  attachPlaybackRecovery,
+  isPrematureMediaEnd,
+  playMediaWithRecovery,
+  resumeIfShouldPlay,
+  waitForMediaReady
+} from "./playback-recovery";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const fmt = (ms: number) => {
@@ -112,7 +119,9 @@ let clearingHistory = false;
 let exportingHistory = false;
 let importingHistory = false;
 let deletingSessionIds = new Set<string>();
-let playingAudio: { sessionId: string; audio: HTMLAudioElement; url: string } | undefined;
+let playingAudio:
+  | { sessionId: string; audio: HTMLAudioElement; url: string; detachRecovery: () => void }
+  | undefined;
 /** Remembers the export-bitrate dropdown choice across history refreshes. */
 const exportBitrateChoice = new Map<string, number>();
 let lastHistoryListKey = "";
@@ -138,23 +147,24 @@ let localMediaPlaylist: LocalMediaPlaylistItem[] = [];
 let localMediaPlaylistIndex = -1;
 let localMediaLoaded: { item: LocalMediaPlaylistItem; objectUrl: string } | undefined;
 let localMediaDragId: string | null = null;
-let localMediaPreviewKeepalive: ReturnType<typeof setInterval> | undefined;
+let localMediaRecoveryDetach: (() => void) | undefined;
+/** True while playlist playback should continue (ignore transient buffering pauses). */
+let localMediaWantsPlay = false;
+/** True from「播放列表」until stop or full playlist end — keeps mic preview off. */
+let localMediaSessionActive = false;
+let localMediaLastPointerAt = 0;
 
-function startLocalMediaPreviewKeepalive() {
-  stopLocalMediaPreviewKeepalive();
-  localMediaPreviewKeepalive = setInterval(() => {
-    if (!localMediaPlaybackActive || recording || busy) return;
-    void ensurePreviewMonitor();
-  }, 1000);
+function isLocalMediaSessionBusy() {
+  return localMediaSessionActive || localMediaWantsPlay || localMediaPlaybackActive;
 }
 
-function stopLocalMediaPreviewKeepalive() {
-  if (localMediaPreviewKeepalive) clearInterval(localMediaPreviewKeepalive);
-  localMediaPreviewKeepalive = undefined;
+function detachLocalMediaRecovery() {
+  localMediaRecoveryDetach?.();
+  localMediaRecoveryDetach = undefined;
 }
 
 async function ensurePreviewMonitor() {
-  if (recording || busy) return;
+  if (recording || busy || localMediaSessionActive) return;
   if (!preview) {
     await startPreview();
     return;
@@ -220,7 +230,7 @@ async function refreshDeviceVerification(forceBrowserProbe = false) {
       const wasPreview = !!preview;
       if (wasPreview) await stopPreview();
       cachedBrowserDefault = await probeBrowserDefaultInput();
-      if (wasPreview && !recording && !busy) await startPreview();
+      if (wasPreview && !recording && !busy && !localMediaSessionActive) await startPreview();
     }
 
     const cmp = compareSelectedWithBrowser(selected, cachedBrowserDefault);
@@ -346,6 +356,7 @@ function renderLocalMediaPlaylist() {
 }
 
 function unloadCurrentLocalMediaTrack() {
+  detachLocalMediaRecovery();
   const video = $<HTMLVideoElement>("localMediaVideo");
   const audio = $<HTMLAudioElement>("localMediaAudio");
   video.pause();
@@ -356,8 +367,8 @@ function unloadCurrentLocalMediaTrack() {
   audio.load();
   video.classList.add("hidden");
   audio.classList.add("hidden");
-  video.onplay = video.onpause = video.onended = video.onerror = null;
-  audio.onplay = audio.onpause = audio.onended = audio.onerror = null;
+  video.onplay = video.onpause = video.onended = video.onerror = video.ontimeupdate = video.onpointerdown = video.onseeking = null;
+  audio.onplay = audio.onpause = audio.onended = audio.onerror = audio.ontimeupdate = audio.onpointerdown = audio.onseeking = null;
   $("localMediaPlayerWrap").classList.add("hidden");
   if (localMediaLoaded) {
     try {
@@ -375,7 +386,8 @@ function clearLocalMediaPlaylist() {
   localMediaPlaylist = [];
   localMediaPlaylistIndex = -1;
   localMediaSequentialPlay = false;
-  stopLocalMediaPreviewKeepalive();
+  localMediaWantsPlay = false;
+  localMediaSessionActive = false;
   renderLocalMediaPlaylist();
   $("localMediaStatus").classList.remove("playing");
   $("localMediaStatus").textContent = playlistReadyStatus(0, isLocalMediaEndedAutoStartEnabled(settings));
@@ -438,11 +450,21 @@ function addLocalMediaFiles(files: FileList | File[]) {
 }
 
 function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
+  detachLocalMediaRecovery();
+  el.preload = "auto";
+  localMediaRecoveryDetach = attachPlaybackRecovery(el, {
+    shouldRecover: () => localMediaWantsPlay,
+    onRecovering: () => {
+      if (localMediaWantsPlay) {
+        $("localMediaStatus").textContent = "播放缓冲中，正在尝试恢复…";
+      }
+    }
+  });
   el.onplay = () => {
+    localMediaWantsPlay = true;
     localMediaPlaybackActive = true;
     previewHadSound = false;
-    void ensurePreviewMonitor();
-    startLocalMediaPreviewKeepalive();
+    void stopPreview();
     updateLocalMediaUi();
     renderLocalMediaPlaylist();
     const statusEl = $("localMediaStatus");
@@ -456,28 +478,62 @@ function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
     statusEl.classList.add("playing");
   };
   el.onpause = () => {
-    if (!el.ended) {
-      localMediaPlaybackActive = false;
-      stopLocalMediaPreviewKeepalive();
-      void ensurePreviewMonitor();
-      updateLocalMediaUi();
-      renderLocalMediaPlaylist();
+    if (el.ended) return;
+    localMediaPlaybackActive = false;
+    updateLocalMediaUi();
+    const userJustClicked = Date.now() - localMediaLastPointerAt < 2000;
+    if (userJustClicked && el.readyState >= 4 && !el.seeking) {
+      localMediaWantsPlay = false;
       $("localMediaStatus").classList.remove("playing");
       $("localMediaStatus").textContent = "播放已暂停。";
+      return;
     }
+    if (localMediaWantsPlay) {
+      $("localMediaStatus").textContent = "播放缓冲中…";
+      return;
+    }
+    $("localMediaStatus").classList.remove("playing");
+    $("localMediaStatus").textContent = "播放已暂停。";
   };
   el.onended = () => {
+    if (isPrematureMediaEnd(el)) {
+      localMediaWantsPlay = true;
+      void el.play().catch(() => undefined);
+      return;
+    }
+    localMediaWantsPlay = false;
     void handleLocalMediaEnded();
   };
   el.onerror = () => {
+    localMediaWantsPlay = false;
+    localMediaSessionActive = false;
     localMediaPlaybackActive = false;
     localMediaSequentialPlay = false;
-    stopLocalMediaPreviewKeepalive();
+    detachLocalMediaRecovery();
     void ensurePreviewMonitor();
     updateLocalMediaUi();
     renderLocalMediaPlaylist();
     $("localMediaStatus").classList.remove("playing");
     $("localMediaStatus").textContent = "无法播放该文件，请换一个格式试试。";
+  };
+  el.onpointerdown = () => {
+    localMediaLastPointerAt = Date.now();
+  };
+  el.onseeking = () => {
+    if (localMediaWantsPlay) $("localMediaStatus").textContent = "正在跳转…";
+  };
+  el.ontimeupdate = () => {
+    if (el.paused || el.ended) return;
+    if (!localMediaWantsPlay) return;
+    localMediaPlaybackActive = true;
+    $("localMediaStatus").classList.add("playing");
+    const fileName = localMediaLoaded?.item.file.name || "";
+    $("localMediaStatus").textContent = playlistPlayingStatus(
+      Math.max(localMediaPlaylistIndex, 0),
+      localMediaPlaylist.length,
+      fileName,
+      isLocalMediaEndedAutoStartEnabled(settings)
+    );
   };
 }
 
@@ -511,7 +567,6 @@ async function loadLocalMediaTrack(index: number) {
   $("localMediaPlayerWrap").classList.remove("hidden");
   renderLocalMediaPlaylist();
   updateLocalMediaUi();
-  void ensurePreviewMonitor();
 }
 
 async function playCurrentLocalMediaTrack() {
@@ -520,13 +575,14 @@ async function playCurrentLocalMediaTrack() {
     localMediaLoaded.item.kind === "video"
       ? $<HTMLVideoElement>("localMediaVideo")
       : $<HTMLAudioElement>("localMediaAudio");
-  await el.play();
+  localMediaWantsPlay = true;
+  localMediaPlaybackActive = true;
+  await playMediaWithRecovery(el);
 }
 
 async function handleLocalMediaEnded() {
+  localMediaWantsPlay = false;
   localMediaPlaybackActive = false;
-  stopLocalMediaPreviewKeepalive();
-  void ensurePreviewMonitor();
   updateLocalMediaUi();
   renderLocalMediaPlaylist();
   const statusEl = $("localMediaStatus");
@@ -541,15 +597,27 @@ async function handleLocalMediaEnded() {
     statusEl.textContent = `即将播放下一项（${nextIndex + 1}/${localMediaPlaylist.length}）…`;
     try {
       await loadLocalMediaTrack(nextIndex);
+      await waitForMediaReady(
+        localMediaLoaded!.item.kind === "video"
+          ? $<HTMLVideoElement>("localMediaVideo")
+          : $<HTMLAudioElement>("localMediaAudio")
+      ).catch(() => undefined);
       await playCurrentLocalMediaTrack();
     } catch (e) {
       localMediaSequentialPlay = false;
+      localMediaSessionActive = false;
+      detachLocalMediaRecovery();
+      void ensurePreviewMonitor();
       statusEl.textContent = friendlyError(e instanceof Error ? e.message : String(e));
     }
     return;
   }
 
   localMediaSequentialPlay = false;
+  localMediaSessionActive = false;
+  detachLocalMediaRecovery();
+  void ensurePreviewMonitor();
+
   if (!isLocalMediaEndedAutoStartEnabled(settings)) {
     statusEl.textContent =
       localMediaPlaylist.length > 1
@@ -565,6 +633,8 @@ async function handleLocalMediaEnded() {
 async function playLocalMediaPlaylistFromIndex(index: number) {
   if (index < 0 || index >= localMediaPlaylist.length || recording || busy) return;
   localMediaSequentialPlay = true;
+  localMediaSessionActive = true;
+  await stopPreview();
   try {
     const item = localMediaPlaylist[index]!;
     if (!localMediaLoaded || localMediaPlaylistIndex !== index || localMediaLoaded.item.id !== item.id) {
@@ -573,7 +643,10 @@ async function playLocalMediaPlaylistFromIndex(index: number) {
     await playCurrentLocalMediaTrack();
   } catch (e) {
     localMediaSequentialPlay = false;
+    localMediaSessionActive = false;
     localMediaPlaybackActive = false;
+    localMediaWantsPlay = false;
+    void ensurePreviewMonitor();
     updateLocalMediaUi();
     renderLocalMediaPlaylist();
     $("localMediaStatus").textContent = friendlyError(e instanceof Error ? e.message : String(e));
@@ -590,6 +663,8 @@ async function playLocalMediaPlaylist() {
 }
 
 function stopLocalMediaPlayback() {
+  localMediaWantsPlay = false;
+  localMediaSessionActive = false;
   if (localMediaLoaded) {
     const el =
       localMediaLoaded.item.kind === "video"
@@ -604,7 +679,7 @@ function stopLocalMediaPlayback() {
   }
   localMediaPlaybackActive = false;
   localMediaSequentialPlay = false;
-  stopLocalMediaPreviewKeepalive();
+  detachLocalMediaRecovery();
   void ensurePreviewMonitor();
   updateLocalMediaUi();
   renderLocalMediaPlaylist();
@@ -837,6 +912,7 @@ function invalidateHistoryReads(reason: string) {
 function stopPlaybackIfSession(sessionId?: string) {
   if (!playingAudio) return;
   if (sessionId && playingAudio.sessionId !== sessionId) return;
+  playingAudio.detachRecovery();
   try {
     playingAudio.audio.pause();
   } catch {
@@ -848,6 +924,20 @@ function stopPlaybackIfSession(sessionId?: string) {
     /* ignore */
   }
   playingAudio = undefined;
+}
+
+async function resumeDashboardPlayback() {
+  if (localMediaWantsPlay && localMediaLoaded) {
+    const el =
+      localMediaLoaded.item.kind === "video"
+        ? $<HTMLVideoElement>("localMediaVideo")
+        : $<HTMLAudioElement>("localMediaAudio");
+    await resumeIfShouldPlay(el);
+    if (!el.paused) localMediaPlaybackActive = true;
+  }
+  if (playingAudio) {
+    await resumeIfShouldPlay(playingAudio.audio);
+  }
 }
 
 function updateHistoryToolbar() {
@@ -1104,7 +1194,7 @@ async function refreshDevices() {
     if (!navigator.mediaDevices?.enumerateDevices) throw new Error("当前浏览器不支持设备枚举");
     devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
     renderDevices(devices);
-    if (!recording) await startPreview();
+    if (!recording && !localMediaSessionActive) await startPreview();
     await refreshDeviceVerification(true);
   } catch (e) {
     $("deviceMsg").textContent = friendlyError(e instanceof Error ? e.message : String(e));
@@ -1133,7 +1223,7 @@ async function stopPreview() {
 }
 
 async function startPreview() {
-  if (recording || busy) return;
+  if (recording || busy || localMediaSessionActive) return;
   await stopPreview();
   resetWaveform($("liveMonitor"));
   setWaveformMode("preview");
@@ -1163,7 +1253,8 @@ async function startPreview() {
         settings.autoStartOnSound !== false &&
         hasStableSound &&
         !previewHadSound &&
-        !localMediaPlaybackActive
+        !localMediaPlaybackActive &&
+        !localMediaSessionActive
       ) {
         void tryAutoStartRecording("sound_detected");
       }
@@ -1467,10 +1558,14 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
             return;
           }
           const url = URL.createObjectURL(result.blob);
-          const audio = new Audio(url);
-          playingAudio = { sessionId: s.id, audio, url };
+          const audio = new Audio();
+          audio.preload = "auto";
+          audio.src = url;
+          const detachRecovery = attachPlaybackRecovery(audio);
+          playingAudio = { sessionId: s.id, audio, url, detachRecovery };
           audio.onended = () => stopPlaybackIfSession(s.id);
           audio.onerror = () => stopPlaybackIfSession(s.id);
+          await waitForMediaReady(audio).catch(() => undefined);
           await audio.play();
         } catch (e) {
           stopPlaybackIfSession(s.id);
@@ -1636,6 +1731,7 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
 
 async function refresh() {
   const requestVersion = historyRequestVersion;
+  const deferHistorySync = localMediaSessionActive;
   try {
     const data = (await ask(MessageType.GetState)) as {
       active: (Session & { elapsedMs?: number; levels?: AudioLevelUpdate[] })[];
@@ -1650,13 +1746,18 @@ async function refresh() {
       });
       return;
     }
-    if (data.settings) settings = { ...DEFAULT_SETTINGS, ...data.settings };
-    syncDownloadSettingsUi();
-    syncAutoStartSettingsUi();
-    const sens = $<HTMLSelectElement>("detectionSensitivity");
-    if (sens) sens.value = settings.detectionSensitivity || "standard";
+    if (data.settings) {
+      settings = { ...DEFAULT_SETTINGS, ...data.settings };
+      if (!deferHistorySync) {
+        syncDownloadSettingsUi();
+        syncAutoStartSettingsUi();
+        const sens = $<HTMLSelectElement>("detectionSensitivity");
+        if (sens) sens.value = settings.detectionSensitivity || "standard";
+      }
+    }
     const active = data.active[0];
     if (active) {
+      if (localMediaSessionActive) stopLocalMediaPlayback();
       recording = true;
       selectedSession = active.id;
       $<HTMLButtonElement>("start").disabled = true;
@@ -1677,11 +1778,13 @@ async function refresh() {
         setStatus("准备就绪");
       }
     }
+    if (deferHistorySync) return;
     if (requestVersion !== historyRequestVersion) return;
+    const livingIds = new Set(data.sessions.map((s) => s.id));
     const reconciled: Session[] = [];
     for (const s of data.sessions) {
       try {
-        reconciled.push(await reconcileSessionMp3Status(s));
+        reconciled.push(await reconcileSessionMp3Status(s, livingIds));
       } catch {
         reconciled.push(s);
       }
@@ -2749,16 +2852,13 @@ if (historyChannel) {
 }
 
 navigator.mediaDevices?.addEventListener("devicechange", () => {
-  if (localMediaPlaybackActive) {
-    void ensurePreviewMonitor();
-    return;
-  }
+  if (localMediaSessionActive || localMediaPlaybackActive || playingAudio) return;
   void refreshDevices();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && !recording && !busy) {
-    void ensurePreviewMonitor();
-  }
+  if (document.visibilityState !== "visible" || recording || busy) return;
+  void resumeDashboardPlayback();
+  if (!localMediaPlaybackActive && !playingAudio) void ensurePreviewMonitor();
 });
 window.addEventListener("beforeunload", () => {
   void stopPreview();

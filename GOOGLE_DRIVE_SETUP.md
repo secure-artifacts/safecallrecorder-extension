@@ -2,43 +2,51 @@
 
 SafeCallRecorder 可将 MP3 上传到 **Google Drive**（用户自己的 Google 账号，不是 Google Cloud Storage 存储桶）。
 
-## 1. 在 Google Cloud Console 创建 OAuth 客户端
+控制面板「Google 云端上传」区域有完整分步指引与直达链接；下文为相同流程的文字版。
 
-1. 打开 [Google Cloud Console](https://console.cloud.google.com/)
-2. 创建或选择一个项目
-3. 启用 **Google Drive API**
-4. 进入 **API 和服务 → 凭据 → 创建凭据 → OAuth 客户端 ID**
+## 步骤 1：打开 Google Cloud 并创建项目
 
-任选一种方式（推荐方式 A）：
+1. 打开 [Google Cloud Console](https://console.cloud.google.com/)，用要上传 Drive 的 Google 账号登录。
+2. 页面顶部项目下拉框 → **新建项目**（若已有项目也可直接选用）。
+3. 项目名称可填 `SafeCallRecorder` → **创建**，等待几秒。
+4. 确认顶部工具栏选中的是刚创建的项目。
 
-### 方式 A：Chrome 扩展程序（推荐）
+## 步骤 2：配置 OAuth 同意屏幕（首次必做）
 
-1. 应用类型选择 **Chrome 扩展程序**
-2. 扩展 ID 填写插件控制面板「Google 云端上传」中显示的 **扩展 ID**（与 `chrome://extensions` 页面一致）
-3. 复制生成的 **客户端 ID**（形如 `xxxx.apps.googleusercontent.com`）
+1. 打开 [OAuth 同意屏幕](https://console.cloud.google.com/apis/credentials/consent)。
+2. 个人 Google 账号选 **外部**；Google Workspace 可选 **内部**。
+3. 填写应用名称、用户支持邮箱、开发者联系邮箱 → **保存并继续**。
+4. **范围** 页可直接 **保存并继续**。
+5. **测试用户** 页添加你用来连接 Google 的 Gmail → **保存并继续**。
+6. 发布状态为「测试中」即可个人使用。
 
-### 方式 B：Web 应用
+## 步骤 3：启用 Google Drive API
 
-1. 应用类型选择 **Web 应用**
-2. 在 **已授权的重定向 URI** 中加入控制面板显示的 **重定向 URI**（形如 `https://<扩展ID>.chromiumapp.org/`）
-3. 复制生成的客户端 ID
+1. 打开 [Google Drive API](https://console.cloud.google.com/apis/library/drive.googleapis.com)。
+2. 确认顶部项目正确。
+3. 点 **启用**。
 
-## 2. 在插件中填写客户端 ID
+## 步骤 4A：创建 OAuth 客户端（推荐 · Chrome 扩展程序）
 
-1. 打开控制面板 → **Google 云端上传**
-2. 在 **OAuth 客户端 ID** 输入框粘贴上一步复制的客户端 ID
-3. 勾选 **启用 Google Drive 上传**
-4. 点击 **连接 Google 账号** 并完成授权
+1. 打开 [创建 OAuth 客户端 ID](https://console.cloud.google.com/apis/credentials/oauthclient)。
+2. 应用类型选 **Chrome 扩展程序**。
+3. **扩展 ID** 填控制面板中显示的扩展 ID（与 `chrome://extensions` 一致）。
+4. **创建** → 复制 **客户端 ID** → 粘贴到控制面板 **OAuth 客户端 ID** 输入框。
 
-无需再编辑 `manifest.json`。若你已在 manifest 中配置了有效的 `oauth2.client_id`，也可继续沿用（不填插件内输入框时自动使用 manifest 中的 ID）。
+## 步骤 4B：创建 OAuth 客户端（备选 · Web 应用）
 
-## 3. 选择文件夹与上传方式
+1. 应用类型选 **Web 应用**。
+2. **已授权的重定向 URI** 添加控制面板显示的重定向 URI（形如 `https://<扩展ID>.chromiumapp.org/`，须完全一致）。
+3. **创建** → 复制客户端 ID → 粘贴到控制面板。
 
-1. **选择 Drive 文件夹** 或 **使用默认文件夹**（会在 Drive 根目录创建 `SafeCallRecorder`）
-2. 选择上传方式：
-   - **保存本地 + 上传云端**：停止后 MP3 既下载到本机，也上传 Drive
-   - **仅上传云端**：停止后 MP3 只上传 Drive，不自动保存 MP3 到本地下载文件夹
-3. 历史记录中也可对单条录音点 **上传云端**
+## 步骤 5：在插件中连接并使用
+
+1. 勾选 **启用 Google Drive 上传**。
+2. 点 **连接 Google 账号** 并完成授权。
+3. **选择 Drive 文件夹** 或 **使用默认文件夹**（自动创建 `SafeCallRecorder`）。
+4. 选择上传方式；勾选「停止录音后自动上传 MP3」可在 MP3 生成后自动上传。
+
+无需编辑 `manifest.json`。若 manifest 中已有有效 `oauth2.client_id`，不填控制面板输入框时会自动沿用。
 
 ## 权限说明
 
@@ -46,18 +54,18 @@ SafeCallRecorder 可将 MP3 上传到 **Google Drive**（用户自己的 Google 
 - `drive.readonly`：浏览文件夹以便选择目标目录
 - 录音原始数据仍保存在本机 IndexedDB；只有 MP3 会上传到 Google Drive
 
-## 4. 换浏览器
+## 换浏览器
 
-1. 在旧浏览器控制面板 → **Google 云端上传** → **导出云端配置**
-2. 在新浏览器加载扩展 → **导入云端配置**（客户端 ID 与文件夹会一并恢复）
-3. 点 **连接 Google 账号** 完成授权
-4. 文件夹与上传选项已恢复，可直接上传
+1. 旧浏览器 **导出云端配置**
+2. 新浏览器 **导入云端配置**（客户端 ID 与文件夹一并恢复）
+3. **连接 Google 账号** 重新授权
 
-配置 JSON 仅含文件夹 ID、客户端 ID 与选项，不含 Google 密码或令牌。
+## 故障排查
 
 | 问题 | 处理 |
 |------|------|
-| 连接失败 / invalid client | 检查插件内客户端 ID 是否正确；Chrome 应用类型需绑定当前扩展 ID；Web 应用类型需加入重定向 URI |
+| `redirect_uri_mismatch` | Web 应用类型的重定向 URI 须与控制面板显示完全一致 |
+| `access blocked` / 403 | 在 OAuth 同意屏幕的测试用户中添加你的 Gmail |
+| 连接失败 / invalid client | 检查客户端 ID；Chrome 扩展类型须绑定当前扩展 ID |
 | 无法列出文件夹 | 确认已启用 Drive API，并重新授权 |
-| 上传失败 | 检查网络；确认已选择目标文件夹 |
 | 停止后没有自动上传 | 确认已勾选「停止录音后自动上传 MP3」，且 MP3 已生成完成 |
