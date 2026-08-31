@@ -33,10 +33,11 @@ function normalizeSettings(raw: AppSettings): AppSettings {
   const mode = (s.stopDownloadMode || "original_then_mp3") as StopDownloadMode;
   s.stopDownloadMode = mode;
   if (s.autoDownloadOriginal == null) {
-    s.autoDownloadOriginal = mode !== "mp3_only";
+    s.autoDownloadOriginal = mode !== "mp3_only" && mode !== "cloud_only";
   }
   if (s.autoDownloadMp3AfterSuccess == null) {
-    s.autoDownloadMp3AfterSuccess = s.autoDownloadMp3 !== false && mode !== "original_only";
+    s.autoDownloadMp3AfterSuccess =
+      s.autoDownloadMp3 !== false && mode !== "original_only" && mode !== "cloud_only";
   }
   if (s.keepOriginalAfterMp3 == null) s.keepOriginalAfterMp3 = true;
   return s;
@@ -100,6 +101,25 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
           });
         }
 
+        if (mode === "cloud_only") {
+          const sessions = await storage.all<Session>("sessions");
+          const session = sessions.find((s) => s.id === sessionId);
+          if (session) {
+            session.mp3Status = "queued";
+            session.historyStatus = "processing_mp3";
+            await storage.saveSession(session);
+          }
+          queueMp3GenerationInBackground(sessionId, {
+            autoDownloadMp3: false,
+            uploadToCloud: true
+          });
+          return reply({
+            ok: true,
+            requestId: req.requestId,
+            data: { mode, originalDownload: null, mp3Queued: true, cloudQueued: true }
+          });
+        }
+
         // 2) Immediate original download (WebM or ZIP).
         if (settings.autoDownloadOriginal !== false) {
           originalDownload = await downloadOriginalRecording(sessionId, { trigger: "auto" });
@@ -148,10 +168,15 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
       if (!existing || p.force) {
         await convertSessionToMp3(sessionId, undefined, {
           forceMono: !!p.forceMono,
-          overrideBitrate: typeof p.overrideBitrate === "number" ? p.overrideBitrate : undefined
+          overrideBitrate: typeof p.overrideBitrate === "number" ? p.overrideBitrate : undefined,
+          exportDisplayName: typeof p.exportDisplayName === "string" ? p.exportDisplayName : undefined
         });
       }
-      if (p.download !== false) await downloadMp3(sessionId, !!p.saveAs, p.force ? "retry" : "manual");
+      if (p.download !== false) {
+        await downloadMp3(sessionId, !!p.saveAs, p.force ? "retry" : "manual", {
+          filenameOverride: typeof p.exportDisplayName === "string" ? p.exportDisplayName : undefined
+        });
+      }
       return reply({ ok: true, requestId: req.requestId });
     }
 

@@ -1,4 +1,5 @@
 import { saveDownloadBlob, saveDownloadUrl } from "../download-save";
+import { buildMp3FileName } from "../filename";
 import { finalizeMp3Blob, mp3HasSeekMetadata } from "../mp3-metadata";
 import { storage } from "../storage-manager";
 import type { Mp3File, Session } from "../types";
@@ -48,7 +49,10 @@ function hasDownloadsApi(): boolean {
   return Boolean(chrome?.downloads?.download);
 }
 
-export async function getMp3BlobForSession(sessionId: string): Promise<Mp3BlobResult> {
+export async function getMp3BlobForSession(
+  sessionId: string,
+  options?: { filenameOverride?: string }
+): Promise<Mp3BlobResult> {
   try {
     const sessions = await storage.all<Session>("sessions");
     const session = sessions.find((s) => s.id === sessionId);
@@ -91,9 +95,16 @@ export async function getMp3BlobForSession(sessionId: string): Promise<Mp3BlobRe
       };
     }
 
-    const filename = (file.fileName || `${sessionId}.mp3`).endsWith(".mp3")
+    const storedName = (file.fileName || `${sessionId}.mp3`).endsWith(".mp3")
       ? file.fileName || `${sessionId}.mp3`
       : `${file.fileName || sessionId}.mp3`;
+    const override = options?.filenameOverride?.trim();
+    const filename =
+      override != null && override !== ""
+        ? override.endsWith(".mp3")
+          ? override
+          : buildMp3FileName(override)
+        : storedName;
 
     let blob = file.blob;
     const raw = new Uint8Array(await blob.arrayBuffer());
@@ -271,7 +282,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 export async function downloadRecordingMp3(
   sessionId: string,
   trigger: DownloadTrigger,
-  options?: { saveAs?: boolean }
+  options?: { saveAs?: boolean; filenameOverride?: string }
 ): Promise<DownloadResult> {
   installDownloadLifecycleListeners();
 
@@ -285,7 +296,9 @@ export async function downloadRecordingMp3(
     try {
       log("button_clicked", { sessionId, trigger });
 
-      const loaded = await getMp3BlobForSession(sessionId);
+      const loaded = await getMp3BlobForSession(sessionId, {
+        filenameOverride: options?.filenameOverride
+      });
       if (!loaded.ok) {
         throw new DownloadError(loaded.error.code, loaded.error.message, loaded.error.details);
       }

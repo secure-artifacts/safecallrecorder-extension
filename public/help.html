@@ -282,9 +282,10 @@
           <h3>停止后怎么下载？</h3>
           <p>在右上角 <strong>⚙ 设置</strong> 里选择「停止录音后的下载方式」：</p>
           <ul>
-            <li><strong>立即下载原始录音，并在后台生成 MP3（推荐）</strong>：马上拿到可播放的原始文件，MP3 稍后再自动下载。</li>
+            <li><strong>立即下载原始录音，并在后台生成整合 MP3（推荐）</strong>：马上拿到可播放的原始文件，后台把所有分段合并成一个 MP3 后再自动下载。</li>
             <li><strong>只下载原始录音</strong>：最快，不转 MP3。</li>
-            <li><strong>只等 MP3</strong>：等待时间较长，一般不推荐。</li>
+            <li><strong>只下载整合 MP3</strong>：停止后等待 MP3 生成完成再下载（含继续录音的所有分段）。</li>
+            <li><strong>只上传整合 MP3 到 Google 云端</strong>：不保存到本机下载文件夹，仅上传 MP3（需先启用 Google 云端）。</li>
           </ul>
           <div class="callout warn">
             <p><strong>当前录音时长</strong>：已经录了多久。</p>
@@ -294,7 +295,7 @@
 
         <section class="help-card" id="name">
           <h2>录音名称怎么拼？</h2>
-          <p class="help-lead">名称默认收起，只显示最终结果。点 <strong>修改</strong> 后再添加、去掉或调整各段顺序。</p>
+          <p class="help-lead">可保存<strong>多套命名方案</strong>（例如「工作」「个人」），开始录音时用当前选中的方案。历史记录导出 MP3 时可另选方案，文件名按所选方案与<strong>该条录音开始日期</strong>生成。</p>
           <figure class="help-figure">
             <img data-help-src="help/img-rec-name.svg" alt="录音名称编辑示意：日期、编号、自定义片段与一轮最大值设置" width="640" height="400" loading="lazy">
             <figcaption>图：点「修改」后展开的名称编辑器（与插件界面一致）</figcaption>
@@ -321,7 +322,13 @@
             <li>日期 + 空格 + 自定义 → <code>0823 VK</code></li>
             <li>日期 + 空格 + 自定义 + 空格 + 编号 → <code>0823 VK 3</code></li>
           </ul>
-          <h3>怎么调整？</h3>
+          <h3>多套命名方案</h3>
+          <ol>
+            <li>在名称上方选择当前方案，点 <strong>新建</strong> / <strong>重命名</strong> / <strong>删除</strong> 管理。</li>
+            <li>每套方案的编号、自定义文字等可独立修改；编号会随日期变化。</li>
+            <li>历史里导出 MP3 时，可在「命名方案」下拉框另选，导出的文件名即按该方案生成。</li>
+          </ol>
+          <h3>怎么调整当前方案？</h3>
           <ol>
             <li>点名称旁边的 <strong>修改</strong>。</li>
             <li>点 <strong>添加</strong>，选择日期 / 编号 / 自定义 / 空格。</li>
@@ -330,7 +337,7 @@
             <li>有日期时，可在「月日」和「年月日」之间切换。</li>
           </ol>
           <div class="callout ok">
-            预览里看到的名称，就是停止后下载文件使用的名字（Windows 不允许的符号会在保存文件时去掉）。
+            预览里看到的名称，就是<strong>开始录音</strong>时使用的名字。导出时可另选命名方案；日期与编号按该条录音的开始日期计算（Windows 不允许的符号会在保存文件时去掉）。
           </div>
         </section>
 

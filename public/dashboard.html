@@ -38,9 +38,10 @@
     <div id="settingsPanel" class="settings hidden">
       <label class="row">停止录音后的下载方式
         <select id="stopDownloadMode">
-          <option value="original_then_mp3">立即下载原始录音，并在后台生成MP3（推荐）</option>
+          <option value="original_then_mp3">立即下载原始录音，并在后台生成整合 MP3（推荐）</option>
           <option value="original_only">只下载原始录音</option>
-          <option value="mp3_only">等待MP3生成后只下载MP3（不推荐）</option>
+          <option value="mp3_only">等待整合 MP3 生成后只下载 MP3</option>
+          <option value="cloud_only">只上传整合 MP3 到 Google 云端（不保存到本机）</option>
         </select>
       </label>
       <p class="hint" id="stopDownloadModeHint">最安全。停止后马上取得录音，MP3完成后再自动下载。</p>
@@ -70,6 +71,15 @@
 
     <section class="card">
       <div class="rec-name-builder">
+        <div class="rec-name-profiles">
+          <label class="rec-name-profile-label">命名方案
+            <select id="recNameProfileSelect" aria-label="选择命名方案"></select>
+          </label>
+          <button type="button" id="recNameProfileAdd" class="btn outline small">新建</button>
+          <button type="button" id="recNameProfileRename" class="btn outline small">重命名</button>
+          <button type="button" id="recNameProfileDelete" class="btn outline small danger-text">删除</button>
+        </div>
+        <p class="hint rec-name-profiles-hint">可保存多套命名规则；开始录音时用当前方案。历史记录导出时可另选方案，文件名按所选方案与录音开始日期生成。</p>
         <div class="rec-name-summary">
           <div class="rec-name-summary-main">
             <span class="rec-name-preview-label">录音名称</span>
@@ -224,15 +234,19 @@
         <input type="checkbox" id="googleDriveEnabled">
       </label>
       <div class="google-drive-setup-guide">
-        <p class="hint google-drive-setup-lead"><strong>首次使用？</strong>需要先用 Google 账号在 Google Cloud 免费创建 OAuth 客户端（约 5–10 分钟，只需配置一次）。<strong>以下按钮名称均按 Google 中文界面书写</strong>，请对照你屏幕上看到的文字点击。</p>
         <p class="hint google-drive-auth-hint"><strong>创建 OAuth 客户端时会用到（请先记住）：</strong><br>扩展 ID：<code id="googleDriveExtensionId">—</code><br>Web 应用重定向 URI：<code id="googleDriveRedirectUri">—</code><br><span class="google-drive-auth-note">扩展 ID 与 <code>chrome://extensions</code> 页面显示的一致；重定向 URI 仅在选择「Web 应用」类型时需要，请完整复制（含末尾 <code>/</code>）。</span></p>
         <label class="google-drive-client-row">
           <span>OAuth 客户端 ID</span>
           <input type="text" id="googleDriveClientId" class="google-drive-input" placeholder="123456789-xxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
         </label>
-        <p class="hint">在 Google Cloud 创建客户端后，把生成的客户端 ID 粘贴到上方输入框。</p>
+        <p class="hint google-drive-client-hint">在 Google Cloud 创建客户端后，把生成的客户端 ID 粘贴到上方输入框。</p>
 
-        <details class="google-drive-setup-step" open>
+        <details class="google-drive-setup-tutor" id="googleDriveSetupTutorial">
+          <summary class="google-drive-setup-tutor-summary">Google Cloud 详细配置教程<span class="google-drive-setup-tutor-hint">（点击展开 / 收起）</span></summary>
+          <div class="google-drive-setup-tutor-body">
+            <p class="hint google-drive-setup-lead"><strong>首次使用？</strong>需要先用 Google 账号在 Google Cloud 免费创建 OAuth 客户端（约 5–10 分钟，只需配置一次）。<strong>以下按钮名称均按 Google 中文界面书写</strong>，请对照你屏幕上看到的文字点击。</p>
+
+        <details class="google-drive-setup-step">
           <summary>步骤 1：创建 Google Cloud 项目（没有项目就无法继续）</summary>
           <div class="google-drive-setup-body">
             <p class="google-drive-where"><strong>推荐：直接打开新建项目页面</strong>（不用自己找按钮）</p>
@@ -366,6 +380,8 @@
         </details>
 
         <p class="hint google-drive-setup-footer">仍有问题？打开插件帮助页「Google 云端上传」。常见错误：重定向 URI 不匹配 → 检查 Web 应用 URI 是否完整；访问遭拒 → 在 <strong>目标对象</strong> 的 <strong>测试用户</strong> 里添加你的 Gmail，且发布状态保持 <strong>测试中</strong>。</p>
+          </div>
+        </details>
       </div>
       <p id="googleDriveSetupHint" class="hint hidden"></p>
       <div id="googleDrivePanel" class="google-drive-panel hidden">

@@ -39,6 +39,18 @@ import {
   type RecordingNamePart
 } from "./recording-name";
 import {
+  addRecordingNameProfile,
+  applyRecordingNameProfilesToSettings,
+  buildSessionRecordingName,
+  findRecordingNameProfile,
+  MAX_RECORDING_NAME_PROFILES,
+  normalizeRecordingNameProfiles,
+  removeRecordingNameProfile,
+  renameRecordingNameProfile,
+  setActiveRecordingNameProfile,
+  updateProfileConfig
+} from "./recording-name-profiles";
+import {
   isLocalMediaEndedAutoStartEnabled,
   addFilesToPlaylist,
   movePlaylistItem,
@@ -124,6 +136,7 @@ let playingAudio:
   | undefined;
 /** Remembers the export-bitrate dropdown choice across history refreshes. */
 const exportBitrateChoice = new Map<string, number>();
+const exportNameProfileChoice = new Map<string, string>();
 let lastHistoryListKey = "";
 let historyExportUiHoldUntil = 0;
 
@@ -707,7 +720,8 @@ function escapeAttr(value: string): string {
 }
 
 function readRecordingNameConfigFromUi(): RecordingNameConfig {
-  const stored = normalizeRecordingNameConfig(settings.recordingName);
+  const { profiles, activeId } = normalizeRecordingNameProfiles(settings);
+  const stored = profiles.find((p) => p.id === activeId)?.config ?? normalizeRecordingNameConfig(settings.recordingName);
   const storedById = new Map(stored.items.map((item) => [item.id, item]));
   const items: RecordingNameItem[] = [...$("recNameToggles").querySelectorAll<HTMLElement>(".rec-name-chip[data-id]")].flatMap(
     (chip) => {
@@ -838,8 +852,61 @@ function applyRecordingNameConfigToUi(config: RecordingNameConfig) {
 }
 
 async function persistRecordingNameConfig(config: RecordingNameConfig) {
-  settings.recordingName = normalizeRecordingNameConfig(config);
+  const profileId =
+    settings.activeRecordingNameProfileId ||
+    normalizeRecordingNameProfiles(settings).activeId;
+  settings = updateProfileConfig(settings, profileId, config);
   await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+}
+
+function syncRecordingNameProfilesUi() {
+  settings = applyRecordingNameProfilesToSettings(settings);
+  const { profiles, activeId } = normalizeRecordingNameProfiles(settings);
+  const select = $<HTMLSelectElement>("recNameProfileSelect");
+  if (select) {
+    select.innerHTML = profiles.map((p) => `<option value="${escapeAttr(p.id)}">${escapeAttr(p.label)}</option>`).join("");
+    select.value = activeId;
+  }
+  const delBtn = $<HTMLButtonElement>("recNameProfileDelete");
+  if (delBtn) delBtn.disabled = profiles.length <= 1;
+  const addBtn = $<HTMLButtonElement>("recNameProfileAdd");
+  if (addBtn) addBtn.disabled = profiles.length >= MAX_RECORDING_NAME_PROFILES;
+  const active = profiles.find((p) => p.id === activeId) ?? profiles[0]!;
+  applyRecordingNameConfigToUi(active.config);
+}
+
+function chosenExportNameProfileId(session: Session): string {
+  const { profiles, activeId } = normalizeRecordingNameProfiles(settings);
+  const picked = exportNameProfileChoice.get(session.id);
+  if (picked && profiles.some((p) => p.id === picked)) return picked;
+  return activeId;
+}
+
+function exportDisplayNameForSession(session: Session, profileId?: string): string {
+  const profile = findRecordingNameProfile(settings, profileId ?? chosenExportNameProfileId(session));
+  return buildSessionRecordingName(profile, session.startedAt);
+}
+
+function buildHistoryNameProfileSelect(session: Session): HTMLSelectElement {
+  const { profiles } = normalizeRecordingNameProfiles(settings);
+  const sel = document.createElement("select");
+  sel.className = "history-export-name";
+  sel.setAttribute("aria-label", "命名方案");
+  const current = chosenExportNameProfileId(session);
+  for (const p of profiles) {
+    sel.append(new Option(p.label, p.id, false, p.id === current));
+  }
+  sel.onmousedown = () => holdHistoryExportUi();
+  sel.onfocus = () => {
+    holdHistoryExportUi();
+    exportNameProfileChoice.set(session.id, sel.value);
+  };
+  sel.onchange = () => {
+    exportNameProfileChoice.set(session.id, sel.value);
+    holdHistoryExportUi(800);
+  };
+  sel.onblur = () => holdHistoryExportUi(400);
+  return sel;
 }
 
 async function tryAutoStartRecording(
@@ -985,6 +1052,7 @@ function removeSessionsFromUi(sessionIds: string[]) {
   for (const id of sessionIds) {
     stopPlaybackIfSession(id);
     exportBitrateChoice.delete(id);
+    exportNameProfileChoice.delete(id);
   }
   historyRecords = historyRecords.filter((r) => !removed.has(r.id));
   console.info("[HistoryDelete]", {
@@ -1473,9 +1541,15 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
       return b;
     };
 
-    const regenerate = async (opts: { forceMono?: boolean; overrideBitrate?: number; label: string }) => {
+    const regenerate = async (opts: {
+      forceMono?: boolean;
+      overrideBitrate?: number;
+      label: string;
+      exportDisplayName?: string;
+    }) => {
       if (regeneratingSessions.has(s.id) || deletingSessionIds.has(s.id)) return;
       regeneratingSessions.add(s.id);
+      const exportName = opts.exportDisplayName ?? exportDisplayNameForSession(s);
       try {
         const target = resolveBitrate(opts.overrideBitrate ?? (s.bitrate || DEFAULT_BITRATE));
         setStatus(`${opts.label}…`);
@@ -1484,11 +1558,12 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
           download: false,
           force: true,
           forceMono: opts.forceMono ?? target <= 16000,
-          overrideBitrate: target
+          overrideBitrate: target,
+          exportDisplayName: exportName
         });
-        setStatus(`已按 ${Math.round(target / 1000)} kbps 生成 MP3`);
+        setStatus(`已按 ${Math.round(target / 1000)} kbps 生成 MP3：${exportName}`);
         await reloadHistoryVerified("after_regenerate");
-        const dl = await downloadRecordingMp3(s.id, "retry");
+        const dl = await downloadRecordingMp3(s.id, "retry", { filenameOverride: exportName });
         if (dl.ok) setStatus(`下载已开始：${dl.filename || ""}`);
         else setStatus(friendlyDownloadError(dl.error.code, dl.error.message));
       } catch (e) {
@@ -1513,7 +1588,11 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
         void (async () => {
           setStatus("正在准备原始录音…");
           try {
-            const result = await downloadOriginalRecording(s.id, { trigger: "manual" });
+            const exportName = exportDisplayNameForSession(s);
+            const result = await downloadOriginalRecording(s.id, {
+              trigger: "manual",
+              displayNameOverride: exportName
+            });
             if (result.ok) setStatus(`原始录音下载已开始：${result.filename || ""}`);
             else setStatus(result.error?.message || "下载原始录音失败");
             await reloadHistoryVerified("after_original_download");
@@ -1529,7 +1608,11 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
         void (async () => {
           setStatus("正在上传到 Google Drive…");
           try {
-            const result = (await ask(MessageType.GoogleDriveUploadMp3, { sessionId: s.id })) as {
+            const exportName = exportDisplayNameForSession(s);
+            const result = (await ask(MessageType.GoogleDriveUploadMp3, {
+              sessionId: s.id,
+              filenameOverride: exportName
+            })) as {
               ok: boolean;
               fileName?: string;
               error?: { message?: string };
@@ -1579,7 +1662,8 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
           dlBtn.disabled = true;
           dlBtn.textContent = "正在读取……";
           try {
-            const result = await downloadRecordingMp3(s.id, "manual");
+            const exportName = exportDisplayNameForSession(s);
+            const result = await downloadRecordingMp3(s.id, "manual", { filenameOverride: exportName });
             if (!result.ok) {
               dlBtn.textContent = "重新下载";
               dlBtn.disabled = false;
@@ -1607,6 +1691,10 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
     if (originalOk && !mp3Busy) {
       const exportRow = document.createElement("div");
       exportRow.className = "history-export";
+      const nameLabel = document.createElement("label");
+      nameLabel.className = "history-export-label";
+      nameLabel.textContent = "命名方案";
+      const nameSel = buildHistoryNameProfileSelect(s);
       const label = document.createElement("label");
       label.className = "history-export-label";
       label.textContent = "导出音质";
@@ -1641,6 +1729,8 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
       exportBtn.textContent = "导出MP3";
       exportBtn.disabled = isDeleting;
       exportBtn.onclick = () => {
+        exportNameProfileChoice.set(s.id, nameSel.value);
+        const exportName = exportDisplayNameForSession(s);
         const target = resolveBitrate(Number(sel.value) || chosenExportBitrate(s));
         exportBitrateChoice.set(s.id, target);
         const sameAsCurrent = canDownloadMp3 && target === resolveBitrate(s.bitrate || DEFAULT_BITRATE);
@@ -1649,7 +1739,7 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
             exportBtn.disabled = true;
             exportBtn.textContent = "正在读取……";
             try {
-              const result = await downloadRecordingMp3(s.id, "manual");
+              const result = await downloadRecordingMp3(s.id, "manual", { filenameOverride: exportName });
               if (!result.ok) {
                 setStatus(friendlyDownloadError(result.error.code, result.error.message));
                 return;
@@ -1666,13 +1756,16 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
         }
         void regenerate({
           overrideBitrate: target,
+          exportDisplayName: exportName,
           label: `正在按 ${Math.round(target / 1000)} kbps 导出 MP3`
         });
       };
-      exportRow.append(label, sel, sizeEl, exportBtn);
+      exportRow.append(nameLabel, nameSel, label, sel, sizeEl, exportBtn);
       actions.append(exportRow);
     } else if (!originalOk && !canDownloadMp3 && !mp3Busy && s.mp3Status !== "skipped") {
-      add("重新生成MP3", "download", () => void regenerate({ label: "正在重新生成 MP3" }));
+      add("重新生成MP3", "download", () =>
+        void regenerate({ label: "正在重新生成 MP3", exportDisplayName: exportDisplayNameForSession(s) })
+      );
     }
 
     if (mp3Failed || s.originalStatus === "download_failed") {
@@ -1893,7 +1986,9 @@ async function startRecording() {
     const deviceLabel = devices.find((d) => d.deviceId === deviceId)?.label || "声音设备";
     const nameConfig = readRecordingNameConfigFromUi();
     await persistRecordingNameConfig(nameConfig);
-    const displayName = buildRecordingName(nameConfig);
+    const displayName = buildSessionRecordingName(
+      findRecordingNameProfile(settings, settings.activeRecordingNameProfileId)
+    );
     const session = (await ask(MessageType.StartRecording, {
       mode: "device",
       deviceId,
@@ -1951,7 +2046,13 @@ async function stopRecording() {
 
     const mode = result?.mode || settings.stopDownloadMode || "original_then_mp3";
     if (mode === "mp3_only") {
-      setStatus("已完成（已按设置等待 MP3）");
+      setStatus("已完成（已按设置等待整合 MP3）");
+    } else if (mode === "cloud_only") {
+      setStatus(
+        result?.mp3Queued
+          ? "录音已停止。整合 MP3 正在生成并将上传到 Google 云端。"
+          : "录音已停止。"
+      );
     } else {
       setStatus("录音已经安全保存，正在准备下载……");
       const od = result?.originalDownload;
@@ -1987,9 +2088,14 @@ async function stopRecording() {
 }
 
 function stopDownloadModeHint(mode: StopDownloadMode): string {
-  if (mode === "original_only") return "最快，不进行MP3转换。";
-  if (mode === "mp3_only") return "等待时间较长，长录音可能失败，不推荐。";
-  return "最安全。停止后马上取得录音，MP3完成后再自动下载。";
+  if (mode === "original_only") return "最快，不进行 MP3 转换。继续录音后停止仍会保留全部原始分段。";
+  if (mode === "mp3_only") return "停止后等待整合 MP3 生成再下载，长录音可能较慢。";
+  if (mode === "cloud_only") {
+    return settings.googleDriveEnabled
+      ? "停止后生成整合 MP3 并上传到 Google 云端，不保存到本机（仅 MP3）。"
+      : "需先在下方启用 Google 云端上传并连接账号。";
+  }
+  return "最安全。停止后马上取得原始录音，后台生成整合 MP3（含继续录音的所有分段）后再自动下载。";
 }
 
 async function refreshDownloadFolderUi() {
@@ -2121,7 +2227,11 @@ async function refreshDriveFolderModal() {
 function syncDownloadSettingsUi() {
   const mode = (settings.stopDownloadMode || "original_then_mp3") as StopDownloadMode;
   const modeEl = $<HTMLSelectElement>("stopDownloadMode");
-  if (modeEl) modeEl.value = mode;
+  if (modeEl) {
+    modeEl.value = mode;
+    const cloudOpt = modeEl.querySelector<HTMLOptionElement>('option[value="cloud_only"]');
+    if (cloudOpt) cloudOpt.disabled = !settings.googleDriveEnabled;
+  }
   const hint = $("stopDownloadModeHint");
   if (hint) hint.textContent = stopDownloadModeHint(mode);
   const autoOrig = $<HTMLInputElement>("autoDownloadOriginal");
@@ -2183,6 +2293,49 @@ async function removeRecordingNameItem(id: string) {
   applyRecordingNameConfigToUi(config);
   await persistRecordingNameConfig(config);
 }
+
+$("recNameProfileSelect").onchange = async () => {
+  const profileId = $<HTMLSelectElement>("recNameProfileSelect").value;
+  settings = setActiveRecordingNameProfile(settings, profileId);
+  await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+  syncRecordingNameProfilesUi();
+};
+$("recNameProfileAdd").onclick = async () => {
+  settings = addRecordingNameProfile(settings);
+  await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+  syncRecordingNameProfilesUi();
+  setRecordingNameEditorOpen(true);
+};
+$("recNameProfileRename").onclick = () => {
+  void (async () => {
+    const profileId = $<HTMLSelectElement>("recNameProfileSelect").value;
+    const profile = findRecordingNameProfile(settings, profileId);
+    const next = window.prompt("命名方案名称", profile.label);
+    if (next == null) return;
+    settings = renameRecordingNameProfile(settings, profileId, next);
+    await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+    syncRecordingNameProfilesUi();
+  })();
+};
+$("recNameProfileDelete").onclick = () => {
+  void (async () => {
+    const { profiles } = normalizeRecordingNameProfiles(settings);
+    if (profiles.length <= 1) return;
+    const profileId = $<HTMLSelectElement>("recNameProfileSelect").value;
+    const profile = findRecordingNameProfile(settings, profileId);
+    const ok = await showConfirm({
+      title: "删除命名方案",
+      body: `确定删除「${profile.label}」吗？`,
+      cancelText: "取消",
+      okText: "删除",
+      danger: true
+    });
+    if (!ok) return;
+    settings = removeRecordingNameProfile(settings, profileId);
+    await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+    syncRecordingNameProfilesUi();
+  })();
+};
 
 $("recNameEditToggle").onclick = () => {
   const open = $("recNameEditor").classList.contains("hidden");
@@ -2581,6 +2734,12 @@ $("stopDownloadMode").onchange = async () => {
     settings.autoDownloadOriginal = false;
     settings.autoDownloadMp3AfterSuccess = true;
     settings.autoDownloadMp3 = true;
+  } else if (mode === "cloud_only") {
+    settings.autoDownloadOriginal = false;
+    settings.autoDownloadMp3AfterSuccess = false;
+    settings.autoDownloadMp3 = false;
+    settings.googleDriveEnabled = true;
+    settings.googleDriveAutoUploadOnStop = true;
   } else {
     settings.autoDownloadOriginal = true;
     settings.autoDownloadMp3AfterSuccess = true;
@@ -2899,7 +3058,7 @@ void (async () => {
   await refresh();
   syncOnboardingCard();
   syncAutoStartSettingsUi();
-  applyRecordingNameConfigToUi(normalizeRecordingNameConfig(settings.recordingName));
+  syncRecordingNameProfilesUi();
   updateLocalMediaUi();
   if (new URLSearchParams(location.search).get("openSettings") === "1") {
     $("settingsPanel").classList.remove("hidden");

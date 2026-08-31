@@ -1,4 +1,5 @@
 import type { RecordingNameConfig } from "./recording-name";
+import type { RecordingNameProfile } from "./recording-name-profiles";
 
 export type SourceMode = "tab" | "device" | "both";
 
@@ -45,7 +46,9 @@ export type HistoryStatus =
 export type StopDownloadMode =
   | "original_then_mp3"
   | "original_only"
-  | "mp3_only";
+  | "mp3_only"
+  /** Generate consolidated MP3 and upload to Google Drive only (no local save). */
+  | "cloud_only";
 
 export interface DeviceInfo {
   deviceId: string;
@@ -175,6 +178,9 @@ export interface AppSettings {
   googleDriveClientId?: string;
   /** Recording name builder (date / daily number / custom). */
   recordingName?: Partial<RecordingNameConfig>;
+  /** Multiple naming schemes; active profile used when starting new recordings. */
+  recordingNameProfiles?: RecordingNameProfile[];
+  activeRecordingNameProfileId?: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

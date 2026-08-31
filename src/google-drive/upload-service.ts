@@ -1,3 +1,4 @@
+import { buildMp3FileName } from "../filename";
 import { getMp3BlobForSession } from "../download/mp3-download-service";
 import { getSettings } from "../extension-storage";
 import { storage } from "../storage-manager";
@@ -24,7 +25,8 @@ async function updateSessionDriveStatus(
 
 export async function uploadSessionMp3ToDrive(
   sessionId: string,
-  trigger: "auto" | "manual" = "manual"
+  trigger: "auto" | "manual" = "manual",
+  options?: { filenameOverride?: string }
 ): Promise<DriveUploadResult> {
   const existing = uploadLocks.get(sessionId);
   if (existing) return existing;
@@ -54,7 +56,14 @@ export async function uploadSessionMp3ToDrive(
         return { ok: false, error: loaded.error };
       }
 
-      const uploaded = await uploadDriveFile(loaded.blob, loaded.filename, loaded.mimeType, folderId);
+      const uploadName =
+        options?.filenameOverride != null && options.filenameOverride !== ""
+          ? options.filenameOverride.endsWith(".mp3")
+            ? options.filenameOverride
+            : buildMp3FileName(options.filenameOverride)
+          : loaded.filename;
+
+      const uploaded = await uploadDriveFile(loaded.blob, uploadName, loaded.mimeType, folderId);
       await updateSessionDriveStatus(sessionId, {
         driveMp3Status: "uploaded",
         driveMp3FileId: uploaded.id,
@@ -79,10 +88,16 @@ export async function uploadSessionMp3ToDrive(
   return task;
 }
 
-export async function maybeAutoUploadMp3AfterEncode(sessionId: string): Promise<DriveUploadResult | null> {
+export async function maybeAutoUploadMp3AfterEncode(
+  sessionId: string,
+  options?: { filenameOverride?: string; force?: boolean }
+): Promise<DriveUploadResult | null> {
   const settings = await getSettings();
-  if (!shouldAutoUploadMp3OnStop(settings) || !hasGoogleDriveFolder(settings)) return null;
-  return uploadSessionMp3ToDrive(sessionId, "auto");
+  if (!options?.force && !shouldAutoUploadMp3OnStop(settings)) return null;
+  if (!hasGoogleDriveFolder(settings)) return null;
+  return uploadSessionMp3ToDrive(sessionId, "auto", {
+    filenameOverride: options?.filenameOverride
+  });
 }
 
 export function driveUploadLabel(session: Session): string {

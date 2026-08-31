@@ -101,7 +101,9 @@ export async function handleGoogleDriveMessage(
   if (type === "GOOGLE_DRIVE_UPLOAD_MP3") {
     const sessionId = String(payload.sessionId || "");
     if (!sessionId) throw new Error("缺少 sessionId");
-    return uploadSessionMp3ToDrive(sessionId, "manual");
+    const filenameOverride =
+      typeof payload.filenameOverride === "string" ? payload.filenameOverride : undefined;
+    return uploadSessionMp3ToDrive(sessionId, "manual", { filenameOverride });
   }
 
   throw new Error(`Unsupported Google Drive message: ${type}`);

@@ -100,7 +100,7 @@ export async function prepareOriginalExport(
 
 export async function downloadOriginalRecording(
   sessionId: string,
-  options?: { saveAs?: boolean; trigger?: "auto" | "manual" }
+  options?: { saveAs?: boolean; trigger?: "auto" | "manual"; displayNameOverride?: string }
 ): Promise<OriginalDownloadResult> {
   const existing = pendingOriginal.get(sessionId);
   if (existing) return existing;
@@ -129,7 +129,7 @@ export async function downloadOriginalRecording(
       };
     }
 
-    const display = session.displayName || session.name;
+    const display = options?.displayNameOverride || session.displayName || session.name;
     const startedAt = session.startedAt;
 
     try {

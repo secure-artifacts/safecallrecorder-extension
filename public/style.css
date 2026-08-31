@@ -586,7 +586,41 @@ input[type="text"]:focus, select:focus {
   background: #f8fafc;
 }
 .google-drive-setup-lead { margin-top: 0; }
+.google-drive-client-hint { margin-bottom: 10px; }
 .google-drive-setup-footer { margin-bottom: 0; font-size: 12px; }
+.google-drive-setup-tutor {
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.google-drive-setup-tutor-summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  list-style: none;
+  background: #f1f5f9;
+  user-select: none;
+}
+.google-drive-setup-tutor-summary::-webkit-details-marker { display: none; }
+.google-drive-setup-tutor-summary::before {
+  content: "▸ ";
+  color: var(--muted, #64748b);
+}
+.google-drive-setup-tutor[open] > .google-drive-setup-tutor-summary::before {
+  content: "▾ ";
+}
+.google-drive-setup-tutor-hint {
+  font-weight: 400;
+  color: var(--muted, #64748b);
+  font-size: 12px;
+}
+.google-drive-setup-tutor-body {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+}
 .google-drive-auth-hint {
   padding: 10px 12px;
   border-radius: 8px;
@@ -822,7 +856,8 @@ input[type="text"]:focus, select:focus {
   font-weight: 700;
   color: #334155;
 }
-.history-export-bitrate {
+.history-export-bitrate,
+.history-export-name {
   min-width: 180px;
   margin: 0;
   padding: 7px 10px;
@@ -831,6 +866,9 @@ input[type="text"]:focus, select:focus {
   background: #f8fafc;
   font: inherit;
   font-size: 13px;
+}
+.history-export-name {
+  min-width: 120px;
 }
 .history-export-size {
   font-size: 12px;
@@ -897,6 +935,30 @@ input[type="text"]:focus, select:focus {
   display: grid;
   gap: 10px;
   margin-bottom: 14px;
+}
+.rec-name-profiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.rec-name-profile-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin: 0;
+}
+.rec-name-profile-label select {
+  min-width: 7rem;
+  max-width: 12rem;
+}
+.rec-name-profiles-hint {
+  margin: 0;
+  font-size: 12px;
+}
+.btn.danger-text {
+  color: var(--danger, #c0392b);
 }
 .rec-name-summary {
   display: flex;

@@ -1,8 +1,9 @@
 import { isLocalMediaUrl } from "./auto-start";
 import {
-  buildRecordingName,
-  normalizeRecordingNameConfig
-} from "./recording-name";
+  applyRecordingNameProfilesToSettings,
+  buildSessionRecordingName,
+  getActiveRecordingNameProfile
+} from "./recording-name-profiles";
 import { MessageType, requestId, type Request, failure } from "./messages";
 import { DEFAULT_SETTINGS, type AppSettings } from "./types";
 import {
@@ -24,11 +25,10 @@ let autoStartInFlight = false;
 async function loadSettings(): Promise<AppSettings> {
   const cur = await storageGetDirect("settings");
   const raw = (cur.settings as AppSettings | undefined) || ({} as AppSettings);
-  return {
+  return applyRecordingNameProfilesToSettings({
     ...DEFAULT_SETTINGS,
-    ...raw,
-    recordingName: normalizeRecordingNameConfig(raw.recordingName)
-  };
+    ...raw
+  });
 }
 
 async function ensureOffscreen() {
@@ -103,8 +103,8 @@ async function startRecordingInBackground(settings: AppSettings, meta: { tabTitl
     return false;
   }
   await ensureOffscreen();
-  const nameConfig = normalizeRecordingNameConfig(settings.recordingName);
-  const displayName = buildRecordingName(nameConfig);
+  const profile = getActiveRecordingNameProfile(settings);
+  const displayName = buildSessionRecordingName(profile);
   const res = await chrome.runtime.sendMessage({
     type: MessageType.StartRecording,
     target: "offscreen",

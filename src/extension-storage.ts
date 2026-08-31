@@ -1,5 +1,5 @@
 import { MessageType, requestId, type Request } from "./messages";
-import { normalizeRecordingNameConfig } from "./recording-name";
+import { applyRecordingNameProfilesToSettings } from "./recording-name-profiles";
 import { DEFAULT_SETTINGS, type AppSettings } from "./types";
 
 export type StorageErrorCode =
@@ -191,11 +191,10 @@ export async function getSettings(): Promise<AppSettings> {
   try {
     const data = (await storageGet("settings")) as { settings?: AppSettings };
     const raw = (data.settings || {}) as AppSettings;
-    return {
+    return applyRecordingNameProfilesToSettings({
       ...DEFAULT_SETTINGS,
-      ...raw,
-      recordingName: normalizeRecordingNameConfig(raw.recordingName)
-    };
+      ...raw
+    });
   } catch (e) {
     logStorageIssue("getSettings", e);
     return { ...DEFAULT_SETTINGS };

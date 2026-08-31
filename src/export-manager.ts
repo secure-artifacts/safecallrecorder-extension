@@ -10,7 +10,7 @@ import {
 import { mixToMono, shouldExportMono, toMp3Kbps } from "./mp3-params";
 import { finalizeMp3Blob } from "./mp3-metadata";
 import { getSettings } from "./extension-storage";
-import { maybeAutoUploadMp3AfterEncode } from "./google-drive/upload-service";
+import { maybeAutoUploadMp3AfterEncode, uploadSessionMp3ToDrive } from "./google-drive/upload-service";
 import { shouldAutoDownloadMp3Locally } from "./google-drive/settings";
 import { storage } from "./storage-manager";
 import { id, type Chunk, type Mp3File, type Session } from "./types";
@@ -443,7 +443,7 @@ function looksLikeMp3(blob: Blob): boolean {
 export async function convertSessionToMp3(
   sessionId: string,
   onProgress?: (msg: string) => void,
-  options?: { forceMono?: boolean; overrideBitrate?: number }
+  options?: { forceMono?: boolean; overrideBitrate?: number; exportDisplayName?: string }
 ): Promise<Mp3File> {
   if (encodingSessions.has(sessionId)) {
     throw new Mp3ConversionError("read_session", "BUSY", "该录音正在生成 MP3，请稍候");
@@ -584,7 +584,7 @@ export async function convertSessionToMp3(
       (session.endedAt && session.startedAt ? session.endedAt - session.startedAt : session.safeDurationMs);
     blob = await finalizeMp3Blob(blob, {
       durationMs: durationMs || 0,
-      title: session.displayName || session.name
+      title: options?.exportDisplayName || session.displayName || session.name
     });
     if (!looksLikeMp3(blob) || blob.size < 64) {
       throw new Mp3ConversionError("validate_mp3", "INVALID_OUTPUT", "生成的 MP3 无效或过小");
@@ -592,7 +592,8 @@ export async function convertSessionToMp3(
 
     stage = "save_mp3";
     session.bitrate = targetBitrate;
-    const fileName = await uniqueFileName(session.displayName || session.name);
+    const exportTitle = options?.exportDisplayName || session.displayName || session.name;
+    const fileName = await uniqueFileName(exportTitle);
     const file: Mp3File = {
       id: id(),
       sessionId,
@@ -667,6 +668,8 @@ export function queueMp3GenerationInBackground(
     autoDownloadMp3?: boolean;
     forceMono?: boolean;
     overrideBitrate?: number;
+    exportDisplayName?: string;
+    uploadToCloud?: boolean;
     onProgress?: (msg: string) => void;
   }
 ): void {
@@ -681,11 +684,21 @@ export function queueMp3GenerationInBackground(
       }
       await convertSessionToMp3(sessionId, options?.onProgress, {
         forceMono: options?.forceMono,
-        overrideBitrate: options?.overrideBitrate
+        overrideBitrate: options?.overrideBitrate,
+        exportDisplayName: options?.exportDisplayName
       });
       const settings = await getSettings();
       try {
-        await maybeAutoUploadMp3AfterEncode(sessionId);
+        if (options?.uploadToCloud === true) {
+          await uploadSessionMp3ToDrive(sessionId, "auto", {
+            filenameOverride: options.exportDisplayName
+          });
+        } else {
+          await maybeAutoUploadMp3AfterEncode(sessionId, {
+            filenameOverride: options?.exportDisplayName,
+            force: false
+          });
+        }
       } catch (e) {
         console.error("[google drive auto]", e);
       }
@@ -704,8 +717,16 @@ export function queueMp3GenerationInBackground(
   })();
 }
 
-export async function downloadMp3(sessionId: string, saveAs = false, trigger: "auto" | "manual" | "retry" = "manual") {
-  const result = await downloadRecordingMp3(sessionId, trigger, { saveAs });
+export async function downloadMp3(
+  sessionId: string,
+  saveAs = false,
+  trigger: "auto" | "manual" | "retry" = "manual",
+  options?: { filenameOverride?: string }
+) {
+  const result = await downloadRecordingMp3(sessionId, trigger, {
+    saveAs,
+    filenameOverride: options?.filenameOverride
+  });
   if (!result.ok) {
     throw new Error(result.error.message);
   }
