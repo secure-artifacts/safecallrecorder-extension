@@ -162,6 +162,10 @@ let localMediaDragId: string | null = null;
 let localMediaRecoveryDetach: (() => void) | undefined;
 /** True while playlist playback should continue (ignore transient buffering pauses). */
 let localMediaWantsPlay = false;
+/** User explicitly paused; block auto-resume until they press play again. */
+let localMediaUserPaused = false;
+/** Ignore pause events caused by buffering until this timestamp. */
+let localMediaBufferingUntil = 0;
 /** True from「播放列表」until stop or full playlist end — keeps mic preview off. */
 let localMediaSessionActive = false;
 let localMediaLastPointerAt = 0;
@@ -399,6 +403,7 @@ function clearLocalMediaPlaylist() {
   localMediaPlaylistIndex = -1;
   localMediaSequentialPlay = false;
   localMediaWantsPlay = false;
+  localMediaUserPaused = false;
   localMediaSessionActive = false;
   renderLocalMediaPlaylist();
   $("localMediaStatus").classList.remove("playing");
@@ -461,11 +466,28 @@ function addLocalMediaFiles(files: FileList | File[]) {
   }
 }
 
+function markLocalMediaUserInteraction() {
+  localMediaLastPointerAt = Date.now();
+}
+
+function classifyLocalMediaPause(el: HTMLMediaElement): "buffering" | "user" {
+  if (localMediaUserPaused) return "user";
+  const userInteractedRecently = Date.now() - localMediaLastPointerAt < 3000;
+  if (userInteractedRecently) return "user";
+  if (
+    localMediaWantsPlay &&
+    (el.readyState < 3 || Date.now() < localMediaBufferingUntil)
+  ) {
+    return "buffering";
+  }
+  return "user";
+}
+
 function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
   detachLocalMediaRecovery();
   el.preload = "auto";
   localMediaRecoveryDetach = attachPlaybackRecovery(el, {
-    shouldRecover: () => localMediaWantsPlay,
+    shouldRecover: () => localMediaWantsPlay && !localMediaUserPaused,
     onRecovering: () => {
       if (localMediaWantsPlay) {
         $("localMediaStatus").textContent = "播放缓冲中，正在尝试恢复…";
@@ -473,6 +495,7 @@ function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
     }
   });
   el.onplay = () => {
+    localMediaUserPaused = false;
     localMediaWantsPlay = true;
     localMediaPlaybackActive = true;
     previewHadSound = false;
@@ -493,17 +516,12 @@ function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
     if (el.ended) return;
     localMediaPlaybackActive = false;
     updateLocalMediaUi();
-    const userJustClicked = Date.now() - localMediaLastPointerAt < 2000;
-    if (userJustClicked && el.readyState >= 4 && !el.seeking) {
-      localMediaWantsPlay = false;
-      $("localMediaStatus").classList.remove("playing");
-      $("localMediaStatus").textContent = "播放已暂停。";
-      return;
-    }
-    if (localMediaWantsPlay) {
+    if (classifyLocalMediaPause(el) === "buffering") {
       $("localMediaStatus").textContent = "播放缓冲中…";
       return;
     }
+    localMediaUserPaused = true;
+    localMediaWantsPlay = false;
     $("localMediaStatus").classList.remove("playing");
     $("localMediaStatus").textContent = "播放已暂停。";
   };
@@ -528,8 +546,16 @@ function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
     $("localMediaStatus").classList.remove("playing");
     $("localMediaStatus").textContent = "无法播放该文件，请换一个格式试试。";
   };
-  el.onpointerdown = () => {
-    localMediaLastPointerAt = Date.now();
+  el.onpointerdown = () => markLocalMediaUserInteraction();
+  el.onclick = () => markLocalMediaUserInteraction();
+  el.onkeydown = (e) => {
+    if (e.code === "Space" || e.code === "Enter") markLocalMediaUserInteraction();
+  };
+  el.onwaiting = () => {
+    localMediaBufferingUntil = Date.now() + 4000;
+    if (localMediaWantsPlay && !localMediaUserPaused) {
+      $("localMediaStatus").textContent = "播放缓冲中…";
+    }
   };
   el.onseeking = () => {
     if (localMediaWantsPlay) $("localMediaStatus").textContent = "正在跳转…";
@@ -587,6 +613,7 @@ async function playCurrentLocalMediaTrack() {
     localMediaLoaded.item.kind === "video"
       ? $<HTMLVideoElement>("localMediaVideo")
       : $<HTMLAudioElement>("localMediaAudio");
+  localMediaUserPaused = false;
   localMediaWantsPlay = true;
   localMediaPlaybackActive = true;
   await playMediaWithRecovery(el);
@@ -594,6 +621,7 @@ async function playCurrentLocalMediaTrack() {
 
 async function handleLocalMediaEnded() {
   localMediaWantsPlay = false;
+  localMediaUserPaused = false;
   localMediaPlaybackActive = false;
   updateLocalMediaUi();
   renderLocalMediaPlaylist();
@@ -676,6 +704,8 @@ async function playLocalMediaPlaylist() {
 
 function stopLocalMediaPlayback() {
   localMediaWantsPlay = false;
+  localMediaUserPaused = false;
+  localMediaBufferingUntil = 0;
   localMediaSessionActive = false;
   if (localMediaLoaded) {
     const el =
@@ -964,7 +994,7 @@ function stopPlaybackIfSession(sessionId?: string) {
 }
 
 async function resumeDashboardPlayback() {
-  if (localMediaWantsPlay && localMediaLoaded) {
+  if (localMediaWantsPlay && !localMediaUserPaused && localMediaLoaded) {
     const el =
       localMediaLoaded.item.kind === "video"
         ? $<HTMLVideoElement>("localMediaVideo")
