@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { normalizeRecordingNameConfig } from "../src/recording-name";
 import {
   addRecordingNameProfile,
   buildSessionRecordingName,
@@ -8,7 +9,7 @@ import {
   setActiveRecordingNameProfile,
   updateProfileConfig
 } from "../src/recording-name-profiles";
-import { DEFAULT_SETTINGS } from "../src/types";
+import { DEFAULT_SETTINGS, type AppSettings } from "../src/types";
 
 describe("recording name profiles", () => {
   it("migrates legacy recordingName into a default profile", () => {
@@ -21,7 +22,7 @@ describe("recording name profiles", () => {
   });
 
   it("adds and removes profiles", () => {
-    let settings = { ...DEFAULT_SETTINGS };
+    let settings: AppSettings = { ...DEFAULT_SETTINGS };
     settings = addRecordingNameProfile(settings, "工作");
     const { profiles } = normalizeRecordingNameProfiles(settings);
     expect(profiles.length).toBe(2);
@@ -40,18 +41,22 @@ describe("recording name profiles", () => {
 
   it("updates active profile config", () => {
     const base = createRecordingNameProfile("默认");
-    let settings = {
+    let settings: AppSettings = {
       ...DEFAULT_SETTINGS,
       recordingNameProfiles: [base],
       activeRecordingNameProfileId: base.id
     };
-    settings = updateProfileConfig(settings, base.id, {
-      items: [{ id: "c1", kind: "custom", text: "VK" }]
-    });
+    settings = updateProfileConfig(
+      settings,
+      base.id,
+      normalizeRecordingNameConfig({
+        items: [{ id: "c1", kind: "custom", text: "VK" }]
+      })
+    );
     settings = setActiveRecordingNameProfile(settings, base.id);
     expect(buildSessionRecordingName(getActive(settings))).toBe("VK");
 
-    function getActive(s: typeof settings) {
+    function getActive(s: AppSettings) {
       const { profiles, activeId } = normalizeRecordingNameProfiles(s);
       return profiles.find((p) => p.id === activeId)!;
     }
