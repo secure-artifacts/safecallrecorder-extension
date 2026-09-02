@@ -101,6 +101,7 @@ import {
   resumeIfShouldPlay,
   waitForMediaReady
 } from "./playback-recovery";
+import { resolveSessionExportName } from "./session-display-name";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const fmt = (ms: number) => {
@@ -180,7 +181,7 @@ function detachLocalMediaRecovery() {
 }
 
 async function ensurePreviewMonitor() {
-  if (recording || busy || localMediaSessionActive) return;
+  if (busy || recording || localMediaPlaybackActive) return;
   if (!preview) {
     await startPreview();
     return;
@@ -293,11 +294,10 @@ function updateLocalMediaUi() {
   const stopBtn = $<HTMLButtonElement>("localMediaStopBtn");
   const clearBtn = $<HTMLButtonElement>("localMediaClearPlaylistBtn");
   const hasPlaylist = localMediaPlaylist.length > 0;
-  const blocked = recording || busy || !hasPlaylist;
-  playBtn.disabled = blocked || localMediaPlaybackActive;
-  stopBtn.disabled = recording || busy || !hasPlaylist;
+  playBtn.disabled = busy || !hasPlaylist || localMediaPlaybackActive;
+  stopBtn.disabled = busy || !hasPlaylist;
   stopBtn.classList.toggle("hidden", !hasPlaylist);
-  clearBtn.disabled = recording || busy || !hasPlaylist || localMediaPlaybackActive;
+  clearBtn.disabled = busy || !hasPlaylist;
 }
 
 function renderLocalMediaPlaylist() {
@@ -364,7 +364,7 @@ function renderLocalMediaPlaylist() {
     li.title = "双击从此处开始播放";
     li.ondblclick = (e) => {
       if ((e.target as HTMLElement).closest(".local-media-playlist-actions")) return;
-      if (recording || busy) return;
+      if (busy) return;
       void playLocalMediaPlaylistFromIndex(index);
     };
     host.append(li);
@@ -608,7 +608,7 @@ async function loadLocalMediaTrack(index: number) {
 }
 
 async function playCurrentLocalMediaTrack() {
-  if (!localMediaLoaded || recording || busy) return;
+  if (!localMediaLoaded || busy) return;
   const el =
     localMediaLoaded.item.kind === "video"
       ? $<HTMLVideoElement>("localMediaVideo")
@@ -671,7 +671,7 @@ async function handleLocalMediaEnded() {
 }
 
 async function playLocalMediaPlaylistFromIndex(index: number) {
-  if (index < 0 || index >= localMediaPlaylist.length || recording || busy) return;
+  if (index < 0 || index >= localMediaPlaylist.length || busy) return;
   localMediaSequentialPlay = true;
   localMediaSessionActive = true;
   await stopPreview();
@@ -694,7 +694,7 @@ async function playLocalMediaPlaylistFromIndex(index: number) {
 }
 
 async function playLocalMediaPlaylist() {
-  if (localMediaPlaylist.length === 0 || recording || busy) return;
+  if (localMediaPlaylist.length === 0 || busy) return;
   const startIndex =
     localMediaLoaded && localMediaPlaylistIndex >= 0 && !localMediaPlaybackActive
       ? localMediaPlaylistIndex
@@ -906,7 +906,24 @@ function syncRecordingNameProfilesUi() {
 
 function exportDisplayNameForSession(session: Session): string {
   const profile = findRecordingNameProfile(settings, settings.activeRecordingNameProfileId);
-  return buildSessionRecordingName(profile, session.startedAt);
+  const schemeName = buildSessionRecordingName(profile, session.startedAt);
+  return resolveSessionExportName(session, schemeName);
+}
+
+async function renameSessionDisplayName(session: Session) {
+  const current = sessionDisplayTitle(session.displayName, session.name);
+  const next = window.prompt(
+    "录音名称（导出与下载使用此名称；Windows 不允许的符号会变为 _）",
+    current
+  );
+  if (next == null) return;
+  try {
+    await ask(MessageType.UpdateSessionDisplayName, { sessionId: session.id, displayName: next });
+    setStatus("名称已更新。");
+    await reloadHistoryVerified("after_rename");
+  } catch (e) {
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+  }
 }
 
 async function tryAutoStartRecording(
@@ -1252,7 +1269,7 @@ function renderDevices(list: MediaDeviceInfo[]) {
     $("deviceMsg").textContent = "";
     $("permCard").classList.add("hidden");
   }
-  $<HTMLButtonElement>("start").disabled = recording || busy || !list.length;
+  $<HTMLButtonElement>("start").disabled = busy || !list.length;
   void refreshDeviceVerification(false);
 }
 
@@ -1261,7 +1278,7 @@ async function refreshDevices() {
     if (!navigator.mediaDevices?.enumerateDevices) throw new Error("当前浏览器不支持设备枚举");
     devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
     renderDevices(devices);
-    if (!recording && !localMediaSessionActive) await startPreview();
+    if (!recording && !localMediaPlaybackActive) await startPreview();
     await refreshDeviceVerification(true);
   } catch (e) {
     $("deviceMsg").textContent = friendlyError(e instanceof Error ? e.message : String(e));
@@ -1290,7 +1307,7 @@ async function stopPreview() {
 }
 
 async function startPreview() {
-  if (recording || busy || localMediaSessionActive) return;
+  if (busy || recording || localMediaPlaybackActive) return;
   await stopPreview();
   resetWaveform($("liveMonitor"));
   setWaveformMode("preview");
@@ -1539,6 +1556,8 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
       actions.append(b);
       return b;
     };
+
+    add("重命名", "outline", () => void renameSessionDisplayName(s));
 
     const regenerate = async (opts: {
       forceMono?: boolean;
@@ -1844,7 +1863,6 @@ async function refresh() {
     }
     const active = data.active[0];
     if (active) {
-      if (localMediaSessionActive) stopLocalMediaPlayback();
       recording = true;
       selectedSession = active.id;
       $<HTMLButtonElement>("start").disabled = true;
@@ -1863,6 +1881,10 @@ async function refresh() {
       $<HTMLButtonElement>("stop").disabled = true;
       if ($("status").textContent === "正在录音" || $("status").textContent === "正在启动……") {
         setStatus("准备就绪");
+      }
+      if (!localMediaPlaybackActive) {
+        setWaveformMode("preview");
+        void ensurePreviewMonitor();
       }
     }
     if (deferHistorySync) return;
@@ -1963,7 +1985,6 @@ async function startRecording() {
     setTimeout(() => $("lowQualityNote").classList.add("hidden"), 4000);
   }
   busy = true;
-  stopLocalMediaPlayback();
   $<HTMLButtonElement>("start").disabled = true;
   updateLocalMediaUi();
   $<HTMLButtonElement>("start").textContent = "正在启动……";
@@ -3057,6 +3078,7 @@ void (async () => {
   syncAutoStartSettingsUi();
   syncRecordingNameProfilesUi();
   updateLocalMediaUi();
+  if (!recording && !localMediaPlaybackActive) void ensurePreviewMonitor();
   if (new URLSearchParams(location.search).get("openSettings") === "1") {
     $("settingsPanel").classList.remove("hidden");
   }

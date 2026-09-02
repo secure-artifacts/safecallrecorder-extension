@@ -1,8 +1,10 @@
-/** Strip only characters illegal in Windows filenames. Do not rewrite letters or symbols. */
+/** Strip/replace characters illegal in Windows filenames. Others are kept as typed. */
 export function sanitizeFileBase(name: string): string {
   const cleaned = name
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
-    .replace(/[\u007F]/g, "")
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+    .replace(/[\u007F]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[.\s_]+|[.\s_]+$/g, "")
     .slice(0, 200);
   if (cleaned === "." || cleaned === "..") return "";
   return cleaned;

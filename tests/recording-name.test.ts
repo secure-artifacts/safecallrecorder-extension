@@ -213,7 +213,7 @@ describe("filename without timestamp", () => {
 
   it("does not rewrite display names when building download filenames", () => {
     expect(buildRecordingName({ useDate: false, useCustom: true, customText: "会议:上" })).toBe("会议:上");
-    expect(buildMp3FileName("会议:上")).toBe("会议上.mp3");
+    expect(buildMp3FileName("会议:上")).toBe("会议_上.mp3");
   });
 
   it("adds numeric suffix for collisions only", () => {

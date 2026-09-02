@@ -17,6 +17,7 @@ export const MessageType = {
   OpenHelp: "OPEN_HELP",
   RequestAutoStart: "REQUEST_AUTO_START",
   RecordingHistoryChanged: "RECORDING_HISTORY_CHANGED",
+  UpdateSessionDisplayName: "UPDATE_SESSION_DISPLAY_NAME",
   GoogleDriveGetStatus: "GOOGLE_DRIVE_GET_STATUS",
   GoogleDriveConnect: "GOOGLE_DRIVE_CONNECT",
   GoogleDriveDisconnect: "GOOGLE_DRIVE_DISCONNECT",
