@@ -97,6 +97,8 @@ export interface Session {
   driveMp3Status?: "idle" | "uploading" | "uploaded" | "failed" | "skipped";
   driveMp3FileId?: string;
   driveMp3FileName?: string;
+  /** Browser URL to open the uploaded MP3 in Google Drive. */
+  driveMp3WebUrl?: string;
   driveMp3Error?: string;
   driveMp3UploadedAt?: number;
 }

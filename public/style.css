@@ -838,6 +838,15 @@ input[type="text"]:focus, select:focus {
   color: #475569;
   font-weight: 600;
 }
+.history-status-split .drive-cloud-link {
+  color: #1769aa;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.history-status-split .drive-cloud-link:hover {
+  color: #0f4c81;
+}
 .history-help { margin: 0 0 10px; font-size: 12px; color: #64748b; line-height: 1.45; }
 .history-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .history-actions .btn.small.download { background: #1769aa; color: #fff; }

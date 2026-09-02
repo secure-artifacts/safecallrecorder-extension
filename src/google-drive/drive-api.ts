@@ -56,8 +56,8 @@ export async function uploadDriveFile(
   fileName: string,
   mimeType: string,
   folderId: string
-): Promise<{ id: string; name: string }> {
-  const init = await fetch(`${DRIVE_UPLOAD}/files?uploadType=resumable`, {
+): Promise<{ id: string; name: string; webViewLink?: string }> {
+  const init = await fetch(`${DRIVE_UPLOAD}/files?uploadType=resumable&fields=id,name,webViewLink`, {
     method: "POST",
     headers: {
       ...(await authHeaders(false)),
@@ -88,6 +88,6 @@ export async function uploadDriveFile(
     const text = await put.text();
     throw new Error(`上传失败：${text || put.statusText}`);
   }
-  const file = (await put.json()) as { id: string; name: string };
+  const file = (await put.json()) as { id: string; name: string; webViewLink?: string };
   return file;
 }

@@ -87,6 +87,7 @@ import {
 } from "./device-verify";
 import { canContinueRecording } from "./recording-continue";
 import { driveUploadLabel } from "./google-drive/upload-service";
+import { driveLinkLabel, resolveSessionDriveWebUrl } from "./google-drive/drive-links";
 import { getGoogleRedirectUri, googleDriveSetupHint, isGoogleDriveConfigured } from "./google-drive/config";
 import {
   applyGoogleDriveConfig,
@@ -1452,8 +1453,21 @@ function historySessionKey(s: Session): string {
     s.bitrate,
     s.originalStatus,
     s.mp3ProgressLabel,
+    s.driveMp3Status,
+    s.driveMp3FileId,
+    s.driveMp3WebUrl,
+    s.displayName,
     deletingSessionIds.has(s.id) ? "1" : "0"
   ].join("|");
+}
+
+function openSessionDriveLink(session: Session) {
+  const url = resolveSessionDriveWebUrl(session);
+  if (!url) {
+    setStatus("暂无 Google 云端链接");
+    return;
+  }
+  chrome.tabs.create({ url });
 }
 
 function historyListKey(sessions: Session[], activeIds: string[]): string {
@@ -1527,7 +1541,32 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
     stateEl.textContent = isDeleting ? "正在删除…" : state;
     stateEl.className = `history-state ${canDownloadMp3 ? "ok" : mp3Failed ? "warn" : "ok"}`;
     const split = item.querySelector(".history-status-split")!;
-    split.innerHTML = `<div>录音状态：${recordingLabel(s)}</div><div>原始录音：${originalLabel(s)}</div><div>MP3：${mp3Label(s)}</div><div>Google 云端：${driveUploadLabel(s)}</div>`;
+    split.replaceChildren();
+    const addSplitLine = (text: string) => {
+      const row = document.createElement("div");
+      row.textContent = text;
+      split.append(row);
+    };
+    addSplitLine(`录音状态：${recordingLabel(s)}`);
+    addSplitLine(`原始录音：${originalLabel(s)}`);
+    addSplitLine(`MP3：${mp3Label(s)}`);
+    const driveRow = document.createElement("div");
+    driveRow.append(`Google 云端：${driveUploadLabel(s)}`);
+    const driveUrl = resolveSessionDriveWebUrl(s);
+    if (driveUrl) {
+      driveRow.append(" · ");
+      const link = document.createElement("a");
+      link.href = driveUrl;
+      link.className = "drive-cloud-link";
+      link.textContent = driveLinkLabel(s);
+      link.title = "在 Google Drive 中打开";
+      link.onclick = (ev) => {
+        ev.preventDefault();
+        openSessionDriveLink(s);
+      };
+      driveRow.append(link);
+    }
+    split.append(driveRow);
     const help = item.querySelector(".history-help")!;
     if (isDeleting) {
       help.textContent = "正在删除此录音…";
@@ -1622,6 +1661,10 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
     }
 
     if (canDownloadMp3 && settings.googleDriveEnabled) {
+      const driveUrl = resolveSessionDriveWebUrl(s);
+      if (driveUrl) {
+        add("打开云端", "outline", () => openSessionDriveLink(s));
+      }
       add("上传云端", "outline", () => {
         void (async () => {
           setStatus("正在上传到 Google Drive…");

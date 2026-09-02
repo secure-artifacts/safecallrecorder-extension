@@ -3,18 +3,24 @@ import { getMp3BlobForSession } from "../download/mp3-download-service";
 import { getSettings } from "../extension-storage";
 import { storage } from "../storage-manager";
 import type { Session } from "../types";
+import { buildDriveFileViewUrl } from "./drive-links";
 import { uploadDriveFile } from "./drive-api";
 import { hasGoogleDriveFolder, shouldAutoUploadMp3OnStop } from "./settings";
 
 const uploadLocks = new Map<string, Promise<DriveUploadResult>>();
 
 export type DriveUploadResult =
-  | { ok: true; fileId: string; fileName: string }
+  | { ok: true; fileId: string; fileName: string; webUrl: string }
   | { ok: false; error: { code: string; message: string } };
 
 async function updateSessionDriveStatus(
   sessionId: string,
-  patch: Partial<Pick<Session, "driveMp3Status" | "driveMp3FileId" | "driveMp3Error" | "driveMp3UploadedAt" | "driveMp3FileName">>
+  patch: Partial<
+    Pick<
+      Session,
+      "driveMp3Status" | "driveMp3FileId" | "driveMp3WebUrl" | "driveMp3Error" | "driveMp3UploadedAt" | "driveMp3FileName"
+    >
+  >
 ) {
   const sessions = await storage.all<Session>("sessions");
   const session = sessions.find((s) => s.id === sessionId);
@@ -64,15 +70,17 @@ export async function uploadSessionMp3ToDrive(
           : loaded.filename;
 
       const uploaded = await uploadDriveFile(loaded.blob, uploadName, loaded.mimeType, folderId);
+      const webUrl = uploaded.webViewLink?.trim() || buildDriveFileViewUrl(uploaded.id);
       await updateSessionDriveStatus(sessionId, {
         driveMp3Status: "uploaded",
         driveMp3FileId: uploaded.id,
         driveMp3FileName: uploaded.name,
+        driveMp3WebUrl: webUrl,
         driveMp3UploadedAt: Date.now(),
         driveMp3Error: undefined
       });
-      console.info("[GoogleDrive]", { stage: "mp3_uploaded", sessionId, trigger, fileId: uploaded.id });
-      return { ok: true, fileId: uploaded.id, fileName: uploaded.name };
+      console.info("[GoogleDrive]", { stage: "mp3_uploaded", sessionId, trigger, fileId: uploaded.id, webUrl });
+      return { ok: true, fileId: uploaded.id, fileName: uploaded.name, webUrl };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       await updateSessionDriveStatus(sessionId, {
