@@ -107,7 +107,8 @@ function saveOptionsForTrigger(options?: {
   const auto = options?.trigger === "auto";
   return {
     saveAs,
-    requestDirectoryPermission: saveAs || !auto || options?.allowPermissionRequest === true
+    // Auto saves must stay silent — same path as background MP3 (no folder picker).
+    requestDirectoryPermission: !auto && (saveAs || options?.allowPermissionRequest !== false)
   };
 }
 
