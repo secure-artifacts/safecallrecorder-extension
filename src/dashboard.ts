@@ -1764,7 +1764,7 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
       const driveUrl = resolveSessionDriveWebUrl(s);
       if (driveUrl) {
         add("打开云端", "outline", () => openSessionDriveLink(s));
-        add("复制链接", "outline", () => void copySessionDriveLink(s));
+        add("复制链接", "copy-link", () => void copySessionDriveLink(s));
       }
       add("上传云端", "outline", () => {
         void (async () => {
@@ -2209,7 +2209,15 @@ async function stopRecording() {
     $("elapsed").textContent = "00:00";
 
     const mode = result?.mode || settings.stopDownloadMode || "original_then_mp3";
-    const od = result?.originalDownload ?? null;
+    let od = result?.originalDownload ?? null;
+    if (
+      !od &&
+      mode !== "mp3_only" &&
+      mode !== "cloud_only" &&
+      settings.autoDownloadOriginal !== false
+    ) {
+      od = await downloadOriginalRecording(id, { trigger: "auto" });
+    }
     if (mode === "mp3_only") {
       setStatus("已完成（已按设置等待整合 MP3）");
     } else if (mode === "cloud_only") {

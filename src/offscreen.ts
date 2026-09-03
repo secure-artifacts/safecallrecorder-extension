@@ -1,7 +1,6 @@
 import {
   convertSessionToMp3,
   downloadMp3,
-  downloadOriginalRecording,
   downloadRecoverableWebm,
   queueMp3GenerationInBackground
 } from "./export-manager";
@@ -118,15 +117,7 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
           });
         }
 
-        // Original download in offscreen — same silent chrome.downloads path as auto MP3.
-        let originalDownload: Awaited<ReturnType<typeof downloadOriginalRecording>> | null = null;
-        if (
-          settings.autoDownloadOriginal !== false &&
-          mode !== "mp3_only" &&
-          mode !== "cloud_only"
-        ) {
-          originalDownload = await downloadOriginalRecording(sessionId, { trigger: "auto" });
-        }
+        // WebM auto-download runs on dashboard (chrome.downloads); offscreen only queues MP3.
 
         // 3) Queue MP3 in background — do not await.
         const wantMp3 = mode === "original_then_mp3";
@@ -156,7 +147,7 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
           requestId: req.requestId,
           data: {
             mode,
-            originalDownload,
+            originalDownload: null,
             mp3Queued: wantMp3
           }
         });

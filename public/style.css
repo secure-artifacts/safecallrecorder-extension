@@ -886,6 +886,13 @@ input[type="text"]:focus, select:focus {
 .history-help { margin: 0 0 10px; font-size: 12px; color: #64748b; line-height: 1.45; }
 .history-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .history-actions .btn.small.download { background: #1769aa; color: #fff; }
+.history-actions .btn.small.copy-link {
+  background: var(--start);
+  color: #fff;
+  border: 1px solid #0f766e;
+  font-weight: 700;
+}
+.history-actions .btn.small.copy-link:hover:not(:disabled) { background: #0f766e; }
 .history-actions .btn.small.play { background: #fff; border: 1px solid var(--line); }
 .history-export {
   display: flex;

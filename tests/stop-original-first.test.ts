@@ -37,15 +37,16 @@ describe("stop → original download → background MP3 contract", () => {
     expect(buf[1]).toBe(0x4b);
   });
 
-  it("offscreen stop downloads original silently then queues MP3 in background", () => {
+  it("dashboard auto-downloads original; offscreen proxies MP3 via service worker", () => {
     const offscreen = readFileSync(new URL("../src/offscreen.ts", import.meta.url), "utf8");
     const dashboard = readFileSync(new URL("../src/dashboard.ts", import.meta.url), "utf8");
+    const downloadSave = readFileSync(new URL("../src/download-save.ts", import.meta.url), "utf8");
     const original = readFileSync(new URL("../src/download/original-download-service.ts", import.meta.url), "utf8");
     expect(offscreen).toContain("queueMp3GenerationInBackground");
-    expect(offscreen).toContain('downloadOriginalRecording(sessionId, { trigger: "auto" })');
-    expect(dashboard).not.toContain("allowPermissionRequest: true");
-    const stopBlock = offscreen.slice(offscreen.indexOf("StopRecording"), offscreen.indexOf("ExportSession"));
-    expect(stopBlock).toMatch(/downloadOriginalRecording[\s\S]*queueMp3GenerationInBackground/);
+    expect(offscreen).not.toMatch(/downloadOriginalRecording\(sessionId, \{ trigger: "auto" \}\)/);
+    expect(dashboard).toContain('downloadOriginalRecording(id, { trigger: "auto" })');
+    expect(downloadSave).toContain("SaveDownloadBlob");
+    expect(downloadSave).toContain("saveDownloadBlobViaServiceWorker");
     expect(original).toContain("requestDirectoryPermission: !auto");
   });
 

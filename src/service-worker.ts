@@ -14,6 +14,7 @@ import {
 } from "./extension-storage";
 import { openHelpPage } from "./help-nav";
 import { handleGoogleDriveMessage } from "./google-drive/sw-handlers";
+import { saveDownloadBlobFromBuffer, saveUrlWithChromeDownloads } from "./download-save";
 import { updateSessionDisplayName } from "./session-display-name";
 
 let creating: Promise<void> | undefined;
@@ -228,6 +229,29 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, reply) => {
       if (!sessionId) throw new Error("缺少 sessionId");
       const session = await updateSessionDisplayName(sessionId, displayName);
       return reply({ ok: true, requestId: msg.requestId, data: session });
+    }
+
+    if (msg.type === MessageType.SaveDownloadBlob) {
+      const payload = msg.payload || {};
+      const buffer = payload.buffer as ArrayBuffer;
+      const mimeType = String(payload.mimeType || "");
+      const filename = String(payload.filename || "download");
+      const downloadFolder =
+        typeof payload.downloadFolder === "string" ? payload.downloadFolder : undefined;
+      const data = await saveDownloadBlobFromBuffer(buffer, mimeType, filename, downloadFolder);
+      if (!data.ok) throw new Error(data.error.message);
+      return reply({ ok: true, requestId: msg.requestId, data });
+    }
+
+    if (msg.type === MessageType.SaveDownloadUrl) {
+      const payload = msg.payload || {};
+      const url = String(payload.url || "");
+      const filename = String(payload.filename || "download");
+      const downloadFolder =
+        typeof payload.downloadFolder === "string" ? payload.downloadFolder : undefined;
+      const data = await saveUrlWithChromeDownloads(url, filename, downloadFolder);
+      if (!data.ok) throw new Error(data.error.message);
+      return reply({ ok: true, requestId: msg.requestId, data });
     }
 
     if (
