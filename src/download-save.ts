@@ -1,4 +1,4 @@
-import { buildDownloadPath } from "./download-path";
+import { buildDownloadPath, browserDownloadSettingsHint } from "./download-path";
 import { writeBlobToDownloadDirectory } from "./download-directory";
 import { clearStagedDownloadBlob, readStagedDownloadBlob, stageDownloadBlob } from "./download-staging";
 import { getSettings, isExtensionContext } from "./extension-storage";
@@ -223,7 +223,7 @@ export async function saveDownloadBlob(
       ok: false,
       error: {
         code: "SILENT_DOWNLOAD_UNAVAILABLE",
-        message: "无法静默保存到已设置的路径，请重新选择保存文件夹或在历史记录中手动下载。"
+        message: `无法自动保存到下载文件夹。${browserDownloadSettingsHint()}`
       }
     };
   }
@@ -288,7 +288,7 @@ export async function saveDownloadUrl(
       ok: false,
       error: {
         code: "SILENT_DOWNLOAD_UNAVAILABLE",
-        message: "无法静默保存到已设置的路径，请重新选择保存文件夹或在历史记录中手动下载。"
+        message: `无法自动保存到下载文件夹。${browserDownloadSettingsHint()}`
       }
     };
   }

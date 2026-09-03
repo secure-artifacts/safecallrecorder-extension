@@ -41,3 +41,12 @@ export function isProtectedFolderPickError(error: unknown): boolean {
 export function friendlyProtectedFolderPickError(): string {
   return "Chrome 不允许直接选择「下载」等系统文件夹。请点「使用下载文件夹」，音频会自动保存到浏览器下载目录；子文件夹可留空。";
 }
+
+/** Shown when auto-download triggers a save dialog — usually browser settings, not the extension. */
+export function browserDownloadSettingsHint(): string {
+  return (
+    "若停止录音后弹出「另存为」窗口，通常是浏览器下载设置导致，不是插件故障。" +
+    "请在浏览器设置中关闭「下载前询问每个文件的保存位置」" +
+    "（Brave：brave://settings/downloads · Chrome：chrome://settings/downloads · Edge：edge://settings/downloads）。"
+  );
+}

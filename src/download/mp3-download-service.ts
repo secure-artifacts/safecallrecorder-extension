@@ -1,4 +1,5 @@
 import { saveDownloadBlob, saveDownloadUrl } from "../download-save";
+import { browserDownloadSettingsHint } from "../download-path";
 import { buildMp3FileName } from "../filename";
 import { finalizeMp3Blob, mp3HasSeekMetadata } from "../mp3-metadata";
 import { storage } from "../storage-manager";
@@ -390,6 +391,10 @@ export function friendlyDownloadError(code: string, message: string): string {
       return "插件没有下载权限，请重新加载扩展。";
     case "DOWNLOAD_API_UNAVAILABLE":
       return "浏览器下载功能不可用，请确认当前页面由扩展打开。";
+    case "DOWNLOAD_FAILED":
+    case "DOWNLOAD_PROXY_FAILED":
+    case "SILENT_DOWNLOAD_UNAVAILABLE":
+      return browserDownloadSettingsHint();
     case "DOWNLOAD_INTERRUPTED":
       return "下载被中断，请重新尝试。";
     case "MP3_READ_FAILED":
