@@ -19,6 +19,7 @@ describe("google drive auth expiry hint", () => {
   it("warns when under 15 minutes", () => {
     const hint = formatGoogleAuthExpiryHint(now + 10 * 60_000, now);
     expect(hint).toContain("10 分钟");
+    expect(hint).toContain("自动刷新");
     expect(isGoogleAuthExpiryWarning(now + 10 * 60_000, now)).toBe(true);
   });
 
