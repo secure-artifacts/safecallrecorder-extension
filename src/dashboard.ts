@@ -43,6 +43,7 @@ import {
   applyRecordingNameProfilesToSettings,
   buildSessionRecordingName,
   findRecordingNameProfile,
+  getActiveRecordingNameProfile,
   MAX_RECORDING_NAME_PROFILES,
   normalizeRecordingNameProfiles,
   removeRecordingNameProfile,
@@ -111,8 +112,8 @@ import {
   resumeIfShouldPlay,
   waitForMediaReady
 } from "./playback-recovery";
-import { resolveSessionExportName } from "./session-display-name";
-import { applyStopDownloadModeToSettings } from "./stop-download-mode";
+import { resolveExportNameForSession } from "./session-display-name";
+import { applyStopDownloadModeToSettings, shouldAutoDownloadOriginalAfterStop } from "./stop-download-mode";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const fmt = (ms: number) => {
@@ -897,6 +898,7 @@ async function persistRecordingNameConfig(config: RecordingNameConfig) {
     normalizeRecordingNameProfiles(settings).activeId;
   settings = updateProfileConfig(settings, profileId, config);
   await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+  await syncActiveRecordingSessionName();
 }
 
 function syncRecordingNameProfilesUi() {
@@ -916,9 +918,23 @@ function syncRecordingNameProfilesUi() {
 }
 
 function exportDisplayNameForSession(session: Session): string {
-  const profile = findRecordingNameProfile(settings, settings.activeRecordingNameProfileId);
-  const schemeName = buildSessionRecordingName(profile, session.startedAt);
-  return resolveSessionExportName(session, schemeName);
+  return resolveExportNameForSession(session, settings);
+}
+
+async function syncActiveRecordingSessionName(clearManualTitle = false) {
+  if (!recording || !selectedSession) return;
+  const schemeName = buildSessionRecordingName(
+    getActiveRecordingNameProfile(settings),
+    startedAt || undefined
+  );
+  if (clearManualTitle) {
+    await ask(MessageType.UpdateSessionDisplayName, { sessionId: selectedSession, displayName: "" }).catch(
+      () => undefined
+    );
+  }
+  await ask(MessageType.UpdateSessionAutoName, { sessionId: selectedSession, name: schemeName }).catch(
+    () => undefined
+  );
 }
 
 async function renameSessionDisplayName(session: Session) {
@@ -2150,6 +2166,7 @@ async function startRecording() {
       throw new Error("本地存储空间不足，请先删除旧录音。");
     }
     const deviceLabel = devices.find((d) => d.deviceId === deviceId)?.label || "声音设备";
+    await flushDownloadFolderSettings();
     const nameConfig = readRecordingNameConfigFromUi();
     await persistRecordingNameConfig(nameConfig);
     const displayName = buildSessionRecordingName(
@@ -2196,6 +2213,7 @@ async function stopRecording() {
   $<HTMLButtonElement>("stop").disabled = true;
   setStatus("正在结束录音……");
   try {
+    await flushDownloadFolderSettings();
     const id = selectedSession;
     setStatus("正在保存最后一段录音……");
     const result = (await ask(MessageType.StopRecording, { sessionId: id })) as {
@@ -2214,9 +2232,7 @@ async function stopRecording() {
     let od = result?.originalDownload ?? null;
     if (
       !od &&
-      mode !== "mp3_only" &&
-      mode !== "cloud_only" &&
-      settings.autoDownloadOriginal !== false
+      shouldAutoDownloadOriginalAfterStop({ ...settings, stopDownloadMode: mode })
     ) {
       setStatus("正在准备原始录音下载……");
       od = await downloadOriginalRecording(id, { trigger: "auto" });
@@ -2263,19 +2279,25 @@ async function stopRecording() {
 }
 
 function stopDownloadModeHint(mode: StopDownloadMode): string {
-  if (mode === "original_only") return "最快，不进行 MP3 转换。继续录音后停止仍会保留全部原始分段。";
-  if (mode === "mp3_only") return "停止后等待整合 MP3 生成再下载，长录音可能较慢。";
+  if (mode === "original_only") {
+    return settings.googleDriveEnabled && settings.googleDriveAutoUploadOnStop !== false
+      ? "最快，不进行本机 MP3 转换；若已启用 Google 云端上传，仍会在后台生成 MP3 并上传。"
+      : "最快，不进行 MP3 转换。继续录音后停止仍会保留全部原始分段。";
+  }
+  if (mode === "mp3_only") return "停止后在后台生成整合 MP3 再下载；若已启用 Google 云端上传，会同步上传。";
   if (mode === "cloud_only") {
     return settings.googleDriveEnabled
       ? "停止后生成整合 MP3 并上传到 Google 云端，不保存到本机（仅 MP3）。"
       : "需先在下方启用 Google 云端上传并连接账号。";
   }
-  return "最安全。停止后马上取得原始录音，后台生成整合 MP3（含继续录音的所有分段）后再自动下载。";
+  return "最安全。停止后马上取得原始录音，后台生成整合 MP3 后再自动下载；若已启用 Google 云端上传，会同步上传。";
 }
 
 async function refreshDownloadFolderUi() {
   const folderInput = $<HTMLInputElement>("downloadFolder");
-  if (folderInput) folderInput.value = settings.downloadFolder ?? "";
+  if (folderInput && document.activeElement !== folderInput) {
+    folderInput.value = settings.downloadFolder ?? "";
+  }
   const label = $("downloadFolderLabel");
   const useBtn = $<HTMLButtonElement>("useDownloadFolderBtn");
   const pickBtn = $<HTMLButtonElement>("pickDownloadFolder");
@@ -2297,9 +2319,24 @@ async function refreshDownloadFolderUi() {
   const pathLabel = await describeDownloadDirectory(settings.downloadFolder);
   if (label) {
     label.textContent = hasCustom
-      ? `当前：${pathLabel}`
-      : `当前：${downloadFolderHint(settings.downloadFolder)}`;
+      ? `当前（自定义文件夹）：${pathLabel}`
+      : `当前（浏览器「下载」）：${downloadFolderHint(settings.downloadFolder)}`;
   }
+}
+
+function readDownloadFolderFromUi(): string {
+  return $<HTMLInputElement>("downloadFolder").value.trim();
+}
+
+async function flushDownloadFolderSettings() {
+  settings.downloadFolder = readDownloadFolderFromUi();
+  await persistDownloadSettings();
+}
+
+let downloadFolderSaveTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleDownloadFolderSave() {
+  clearTimeout(downloadFolderSaveTimer);
+  downloadFolderSaveTimer = setTimeout(() => void flushDownloadFolderSettings(), 400);
 }
 
 async function useBrowserDownloadFolder() {
@@ -2501,6 +2538,7 @@ $("recNameProfileSelect").onchange = async () => {
   settings = setActiveRecordingNameProfile(settings, profileId);
   await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
   syncRecordingNameProfilesUi();
+  await syncActiveRecordingSessionName(true);
 };
 $("recNameProfileAdd").onclick = async () => {
   settings = addRecordingNameProfile(settings);
@@ -2727,13 +2765,14 @@ $("keepOriginalAfterMp3").onchange = async () => {
   await persistDownloadSettings();
 };
 $("downloadFolder").onchange = async () => {
-  settings.downloadFolder = $<HTMLInputElement>("downloadFolder").value.trim();
+  settings.downloadFolder = readDownloadFolderFromUi();
   await refreshDownloadFolderUi();
   await persistDownloadSettings();
 };
 $("downloadFolder").oninput = () => {
-  settings.downloadFolder = $<HTMLInputElement>("downloadFolder").value.trim();
+  settings.downloadFolder = readDownloadFolderFromUi();
   void refreshDownloadFolderUi();
+  scheduleDownloadFolderSave();
 };
 $("useDownloadFolderBtn").onclick = () => {
   void useBrowserDownloadFolder();

@@ -9,6 +9,7 @@ import {
 } from "./download/original-download-service";
 import { mixToMono, shouldExportMono, toMp3Kbps } from "./mp3-params";
 import { finalizeMp3Blob } from "./mp3-metadata";
+import { resolveExportNameForSession } from "./session-display-name";
 import { getSettings } from "./extension-storage";
 import { maybeAutoUploadMp3AfterEncode, uploadSessionMp3ToDrive } from "./google-drive/upload-service";
 import { shouldAutoDownloadMp3Locally } from "./google-drive/settings";
@@ -577,6 +578,8 @@ export async function convertSessionToMp3(
 
     stage = "validate_mp3";
     await updateMp3Progress(session, "validating", 96, "正在校验 MP3…");
+    const settings = await getSettings();
+    const exportTitle = options?.exportDisplayName || resolveExportNameForSession(session, settings);
     let blob = encoded.blob;
     const durationMs =
       totalDurationMs ||
@@ -584,7 +587,7 @@ export async function convertSessionToMp3(
       (session.endedAt && session.startedAt ? session.endedAt - session.startedAt : session.safeDurationMs);
     blob = await finalizeMp3Blob(blob, {
       durationMs: durationMs || 0,
-      title: options?.exportDisplayName || session.displayName || session.name
+      title: exportTitle
     });
     if (!looksLikeMp3(blob) || blob.size < 64) {
       throw new Mp3ConversionError("validate_mp3", "INVALID_OUTPUT", "生成的 MP3 无效或过小");
@@ -592,7 +595,6 @@ export async function convertSessionToMp3(
 
     stage = "save_mp3";
     session.bitrate = targetBitrate;
-    const exportTitle = options?.exportDisplayName || session.displayName || session.name;
     const fileName = await uniqueFileName(exportTitle);
     const file: Mp3File = {
       id: id(),
@@ -677,6 +679,10 @@ export function queueMp3GenerationInBackground(
     try {
       const sessions = await storage.all<Session>("sessions");
       const session = sessions.find((s) => s.id === sessionId);
+      const settings = await getSettings();
+      const resolvedExportName =
+        options?.exportDisplayName ||
+        (session ? resolveExportNameForSession(session, settings) : undefined);
       if (session) {
         session.mp3Status = "queued";
         session.historyStatus = "processing_mp3";
@@ -685,17 +691,16 @@ export function queueMp3GenerationInBackground(
       await convertSessionToMp3(sessionId, options?.onProgress, {
         forceMono: options?.forceMono,
         overrideBitrate: options?.overrideBitrate,
-        exportDisplayName: options?.exportDisplayName
+        exportDisplayName: resolvedExportName
       });
-      const settings = await getSettings();
       try {
         if (options?.uploadToCloud === true) {
           await uploadSessionMp3ToDrive(sessionId, "auto", {
-            filenameOverride: options.exportDisplayName
+            filenameOverride: resolvedExportName
           });
         } else {
           await maybeAutoUploadMp3AfterEncode(sessionId, {
-            filenameOverride: options?.exportDisplayName,
+            filenameOverride: resolvedExportName,
             force: false
           });
         }

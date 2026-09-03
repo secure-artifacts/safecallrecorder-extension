@@ -15,7 +15,7 @@ import {
 import { openHelpPage } from "./help-nav";
 import { handleGoogleDriveMessage } from "./google-drive/sw-handlers";
 import { saveDownloadBlobFromStaging, saveUrlWithChromeDownloads } from "./download-save";
-import { updateSessionDisplayName } from "./session-display-name";
+import { updateSessionAutoName, updateSessionDisplayName } from "./session-display-name";
 
 let creating: Promise<void> | undefined;
 let openingDashboard: Promise<void> | undefined;
@@ -228,6 +228,14 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, reply) => {
       const displayName = String(msg.payload?.displayName ?? "");
       if (!sessionId) throw new Error("缺少 sessionId");
       const session = await updateSessionDisplayName(sessionId, displayName);
+      return reply({ ok: true, requestId: msg.requestId, data: session });
+    }
+
+    if (msg.type === MessageType.UpdateSessionAutoName) {
+      const sessionId = String(msg.payload?.sessionId || "");
+      const name = String(msg.payload?.name ?? "");
+      if (!sessionId) throw new Error("缺少 sessionId");
+      const session = await updateSessionAutoName(sessionId, name);
       return reply({ ok: true, requestId: msg.requestId, data: session });
     }
 

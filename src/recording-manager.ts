@@ -65,7 +65,6 @@ export class RecordingManager {
     const session: Session = {
       id: input.sessionId || id(),
       name: title,
-      displayName: displayName !== "" ? displayName : undefined,
       mode,
       status: "starting",
       recordingStatus: "starting",

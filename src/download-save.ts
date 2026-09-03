@@ -1,5 +1,5 @@
 import { buildDownloadPath, browserDownloadSettingsHint } from "./download-path";
-import { writeBlobToDownloadDirectory } from "./download-directory";
+import { getSavedDownloadDirectory, writeBlobToDownloadDirectory } from "./download-directory";
 import { clearStagedDownloadBlob, readStagedDownloadBlob, stageDownloadBlob } from "./download-staging";
 import { getSettings, isExtensionContext } from "./extension-storage";
 import { MessageType, requestId, type Request, type Response } from "./messages";
@@ -174,16 +174,34 @@ export async function saveDownloadBlob(
   const requestDirectoryPermission = options?.requestDirectoryPermission !== false;
   const silentAuto = !saveAs && !requestDirectoryPermission;
   const folder = settings.downloadFolder;
+  const customDir = await getSavedDownloadDirectory();
 
-  // Auto-stop: custom folder (if already granted) → local chrome.downloads → SW staging (offscreen).
-  if (silentAuto && isExtensionContext()) {
-    const custom = await writeBlobToDownloadDirectory(blob, filename, folder, false);
+  async function tryCustomDirectory(requestPermission: boolean): Promise<SaveDownloadResult | null> {
+    const custom = await writeBlobToDownloadDirectory(blob, filename, folder, requestPermission);
     if (custom.ok) {
       return {
         ok: true,
         filename: custom.fileName,
         method: "filesystem",
         pathLabel: custom.pathLabel
+      };
+    }
+    return null;
+  }
+
+  // Auto-stop: custom folder (if already granted) → local chrome.downloads → SW staging (offscreen).
+  if (silentAuto && isExtensionContext()) {
+    if (customDir) {
+      let saved = await tryCustomDirectory(false);
+      if (!saved) saved = await tryCustomDirectory(true);
+      if (saved) return saved;
+      return {
+        ok: false,
+        error: {
+          code: "CUSTOM_FOLDER_WRITE_FAILED",
+          message:
+            "无法写入已选择的保存文件夹。请打开控制面板，重新点「选择其他位置…」并允许访问；或点「使用下载文件夹」改用浏览器下载目录。"
+        }
       };
     }
     if (hasDownloadsApi()) {
@@ -192,14 +210,22 @@ export async function saveDownloadBlob(
     return saveDownloadBlobViaServiceWorker(blob, filename, folder);
   }
   if (!saveAs) {
-    const custom = await writeBlobToDownloadDirectory(blob, filename, folder, requestDirectoryPermission);
-    if (custom.ok) {
-      return {
-        ok: true,
-        filename: custom.fileName,
-        method: "filesystem",
-        pathLabel: custom.pathLabel
-      };
+    if (customDir) {
+      let saved = await tryCustomDirectory(requestDirectoryPermission);
+      if (!saved && requestDirectoryPermission) saved = await tryCustomDirectory(true);
+      if (saved) return saved;
+      if (customDir) {
+        return {
+          ok: false,
+          error: {
+            code: "CUSTOM_FOLDER_WRITE_FAILED",
+            message: "无法写入已选择的保存文件夹，请重新选择保存位置。"
+          }
+        };
+      }
+    } else {
+      const saved = await tryCustomDirectory(requestDirectoryPermission);
+      if (saved) return saved;
     }
   }
 
@@ -253,20 +279,43 @@ export async function saveDownloadUrl(
   const saveAs = !!options?.saveAs;
   const silentAuto = !saveAs && options?.requestDirectoryPermission === false;
   const folder = settings.downloadFolder;
+  const customDir = await getSavedDownloadDirectory();
+
+  async function tryCustomFromUrl(requestPermission: boolean): Promise<SaveDownloadResult | null> {
+    if (!url.startsWith("data:")) return null;
+    try {
+      const blob = await (await fetch(url)).blob();
+      const custom = await writeBlobToDownloadDirectory(blob, filename, folder, requestPermission);
+      if (custom.ok) {
+        return {
+          ok: true,
+          filename: custom.fileName,
+          method: "filesystem",
+          pathLabel: custom.pathLabel
+        };
+      }
+    } catch {
+      /* fall through */
+    }
+    return null;
+  }
 
   if (silentAuto && isExtensionContext()) {
+    if (customDir) {
+      let saved = await tryCustomFromUrl(false);
+      if (!saved) saved = await tryCustomFromUrl(true);
+      if (saved) return saved;
+      return {
+        ok: false,
+        error: {
+          code: "CUSTOM_FOLDER_WRITE_FAILED",
+          message: "无法写入已选择的保存文件夹，请重新选择保存位置。"
+        }
+      };
+    }
     if (url.startsWith("data:")) {
       try {
         const blob = await (await fetch(url)).blob();
-        const custom = await writeBlobToDownloadDirectory(blob, filename, folder, false);
-        if (custom.ok) {
-          return {
-            ok: true,
-            filename: custom.fileName,
-            method: "filesystem",
-            pathLabel: custom.pathLabel
-          };
-        }
         if (hasDownloadsApi()) {
           return saveBlobWithChromeDownloads(blob, filename, folder);
         }

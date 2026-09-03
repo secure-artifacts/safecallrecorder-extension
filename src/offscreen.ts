@@ -15,6 +15,10 @@ import { openInput } from "./device-manager";
 import { DEFAULT_SETTINGS, type AppSettings, type Session, type StopDownloadMode } from "./types";
 import { getSettings } from "./extension-storage";
 import { resolveStopDownloadMode } from "./google-drive/settings";
+import {
+  shouldAutoDownloadMp3AfterStop,
+  shouldGenerateMp3AfterStop
+} from "./stop-download-mode";
 
 let levelSubscribers = 0;
 let stopping = false;
@@ -82,24 +86,10 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
         // 1) Finalize capture only — do NOT await MP3.
         await recordings.stop(sessionId);
 
-        if (mode === "mp3_only") {
-          // Legacy path: wait for MP3 then download (not recommended).
-          try {
-            await convertSessionToMp3(sessionId);
-            if (settings.autoDownloadMp3AfterSuccess !== false) {
-              await downloadMp3(sessionId, false, "auto").catch((e) => console.error("[download]", e));
-            }
-          } catch (e) {
-            console.error("[mp3 sync]", e);
-          }
-          return reply({
-            ok: true,
-            requestId: req.requestId,
-            data: { mode, originalDownload: null, mp3Queued: false }
-          });
-        }
+        const generateMp3 = shouldGenerateMp3AfterStop(settings);
+        const autoDownloadMp3 = shouldAutoDownloadMp3AfterStop(settings);
 
-        if (mode === "cloud_only") {
+        if (generateMp3) {
           const sessions = await storage.all<Session>("sessions");
           const session = sessions.find((s) => s.id === sessionId);
           if (session) {
@@ -108,30 +98,8 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
             await storage.saveSession(session);
           }
           queueMp3GenerationInBackground(sessionId, {
-            autoDownloadMp3: false,
-            uploadToCloud: true
-          });
-          return reply({
-            ok: true,
-            requestId: req.requestId,
-            data: { mode, originalDownload: null, mp3Queued: true, cloudQueued: true }
-          });
-        }
-
-        // WebM auto-download runs on dashboard after stop (avoid SW/offscreen deadlock).
-
-        // Queue MP3 in background — do not await.
-        const wantMp3 = mode === "original_then_mp3";
-        if (wantMp3) {
-          const sessions = await storage.all<Session>("sessions");
-          const session = sessions.find((s) => s.id === sessionId);
-          if (session) {
-            session.mp3Status = "queued";
-            session.historyStatus = "processing_mp3";
-            await storage.saveSession(session);
-          }
-          queueMp3GenerationInBackground(sessionId, {
-            autoDownloadMp3: settings.autoDownloadMp3AfterSuccess !== false
+            autoDownloadMp3,
+            uploadToCloud: mode === "cloud_only"
           });
         } else {
           const sessions = await storage.all<Session>("sessions");
@@ -149,7 +117,8 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
           data: {
             mode,
             originalDownload: null,
-            mp3Queued: wantMp3
+            mp3Queued: generateMp3,
+            cloudQueued: mode === "cloud_only" || generateMp3
           }
         });
       } finally {

@@ -1,5 +1,7 @@
 import { saveDownloadBlob } from "../download-save";
 import { buildOriginalFileName, buildRecoveryZipName, formatStamp, sanitizeFileBase } from "../filename";
+import { resolveExportNameForSession } from "../session-display-name";
+import { getSettings } from "../extension-storage";
 import { storage } from "../storage-manager";
 import { type Chunk, type Part, type Session } from "../types";
 import { finalizeWebmDurationBlob } from "../webm-duration";
@@ -143,7 +145,9 @@ export async function downloadOriginalRecording(
       };
     }
 
-    const display = options?.displayNameOverride || session.displayName || session.name;
+    const settings = await getSettings();
+    const display =
+      options?.displayNameOverride || resolveExportNameForSession(session, settings);
     const startedAt = session.startedAt;
 
     try {
