@@ -194,6 +194,28 @@ export function clearGoogleDriveSettings(settings: AppSettings): AppSettings {
   return next;
 }
 
+/** Patch for setSettings — explicit undefined keys survive local storage merge (not chrome messages). */
+export function googleDriveSettingsClearPatch(settings: AppSettings): Partial<AppSettings> {
+  const cleared = clearGoogleDriveSettings(settings);
+  const patch: Partial<AppSettings> = {
+    googleDriveEnabled: false,
+    googleDriveUploadMode: "local_and_cloud",
+    googleDriveAutoUploadOnStop: true,
+    googleDriveFolderId: undefined,
+    googleDriveFolderName: undefined,
+    googleDriveAccountEmail: undefined,
+    googleDriveClientId: undefined,
+    googleDriveClientSecret: undefined
+  };
+  if (settings.stopDownloadMode === "cloud_only") {
+    patch.stopDownloadMode = cleared.stopDownloadMode;
+    patch.autoDownloadOriginal = cleared.autoDownloadOriginal;
+    patch.autoDownloadMp3AfterSuccess = cleared.autoDownloadMp3AfterSuccess;
+    patch.autoDownloadMp3 = cleared.autoDownloadMp3;
+  }
+  return patch;
+}
+
 export function describeGoogleDriveConfigExport(authSession?: GoogleDriveAuthSessionExport | null): string {
   if (authSession?.refreshToken?.trim()) {
     return "含客户端 ID、密钥与长期登录状态；导入后通常无需再点「连接 Google 账号」。";

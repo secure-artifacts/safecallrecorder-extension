@@ -3,6 +3,7 @@ import {
   applyGoogleDriveConfig,
   buildGoogleDriveConfigExport,
   clearGoogleDriveSettings,
+  googleDriveSettingsClearPatch,
   parseGoogleDriveConfig,
   serializeGoogleDriveConfig
 } from "../src/google-drive/config-backup";
@@ -175,6 +176,23 @@ describe("google drive config backup", () => {
     expect(cleared.googleDriveClientId).toBeUndefined();
     expect(cleared.googleDriveAccountEmail).toBeUndefined();
     expect(cleared.stopDownloadMode).toBe("original_then_mp3");
+  });
+
+  it("builds storage patch that clears google drive fields", () => {
+    const patch = googleDriveSettingsClearPatch({
+      ...DEFAULT_SETTINGS,
+      stopDownloadMode: "cloud_only",
+      googleDriveEnabled: true,
+      googleDriveFolderId: "folder123",
+      googleDriveClientId: "123.apps.googleusercontent.com",
+      googleDriveClientSecret: "GOCSPX-secret",
+      googleDriveAccountEmail: "user@example.com"
+    });
+    expect(patch.googleDriveEnabled).toBe(false);
+    expect(patch.googleDriveFolderId).toBeUndefined();
+    expect(patch.googleDriveClientId).toBeUndefined();
+    expect(patch.googleDriveClientSecret).toBeUndefined();
+    expect(patch.stopDownloadMode).toBe("original_then_mp3");
   });
 
   it("builds export document", () => {

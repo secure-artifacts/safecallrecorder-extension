@@ -107,6 +107,7 @@ import {
   clearGoogleDriveSettings,
   describeGoogleDriveConfigExport,
   googleDriveConfigFileName,
+  googleDriveSettingsClearPatch,
   isUsableAuthSessionExport,
   parseGoogleDriveConfig,
   serializeGoogleDriveConfig
@@ -1299,6 +1300,15 @@ function flushGoogleDriveCredentialsFromUi() {
   const clientSecret = secretInput?.value.trim() ?? "";
   settings.googleDriveClientId = clientId || undefined;
   settings.googleDriveClientSecret = clientSecret || undefined;
+}
+
+function resetGoogleDriveCredentialInputs() {
+  const clientInput = $<HTMLInputElement>("googleDriveClientId");
+  const secretInput = $<HTMLInputElement>("googleDriveClientSecret");
+  if (clientInput) clientInput.value = "";
+  if (secretInput) secretInput.value = "";
+  settings.googleDriveClientId = undefined;
+  settings.googleDriveClientSecret = undefined;
 }
 
 let driveUploadCopyUrl = "";
@@ -3385,11 +3395,14 @@ $("googleDriveClearConfig").onclick = () => {
     if (!ok) return;
     try {
       await ask(MessageType.GoogleDriveDisconnect).catch(() => undefined);
+      resetGoogleDriveCredentialInputs();
+      const clearPatch = googleDriveSettingsClearPatch(settings);
       settings = clearGoogleDriveSettings(settings);
+      const merged = await setSettings(clearPatch);
+      Object.assign(settings, merged);
       googleDriveAuthExpiresAt = null;
       googleDriveAuthHasRefreshToken = false;
       googleDriveAuthValid = false;
-      await persistDownloadSettings(true);
       syncDownloadSettingsUi();
       syncGoogleDriveSettingsUi();
       setStatus("已清空 Google 云端配置。如需再次使用，请重新填写客户端 ID 并连接账号。");
