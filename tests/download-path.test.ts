@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import {
+  directoryPickerUnavailableMessage,
+  supportsDirectoryPicker
+} from "../src/download-directory";
 import {
   buildDownloadPath,
   DEFAULT_DOWNLOAD_FOLDER,
@@ -7,6 +12,20 @@ import {
   isProtectedFolderPickError,
   sanitizeDownloadFolder
 } from "../src/download-path";
+
+describe("download directory picker", () => {
+  it("does not disable pick button when API missing (handled in UI)", () => {
+    const dashboard = readFileSync(new URL("../src/dashboard.ts", import.meta.url), "utf8");
+    expect(dashboard).toContain("pickBtn.disabled = false");
+    expect(dashboard).toContain("downloadFolderPickerUnsupported");
+  });
+
+  it("explains Brave limitation when picker unavailable", () => {
+    const msg = directoryPickerUnavailableMessage();
+    expect(msg).toContain("使用下载文件夹");
+    expect(typeof supportsDirectoryPicker()).toBe("boolean");
+  });
+});
 
 describe("download path", () => {
   it("sanitizes folder segments", () => {

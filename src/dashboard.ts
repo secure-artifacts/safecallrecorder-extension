@@ -73,7 +73,8 @@ import {
   describeDownloadDirectory,
   getSavedDownloadDirectory,
   pickDownloadDirectory,
-  supportsDirectoryPicker
+  supportsDirectoryPicker,
+  directoryPickerUnavailableMessage
 } from "./download-directory";
 import { saveDownloadBlob } from "./download-save";
 import { deviceHint } from "./device-manager";
@@ -2276,15 +2277,21 @@ async function refreshDownloadFolderUi() {
   const label = $("downloadFolderLabel");
   const useBtn = $<HTMLButtonElement>("useDownloadFolderBtn");
   const pickBtn = $<HTMLButtonElement>("pickDownloadFolder");
+  const pickerOk = supportsDirectoryPicker();
   const hasCustom = Boolean(await getSavedDownloadDirectory());
   if (pickBtn) {
-    pickBtn.disabled = !supportsDirectoryPicker();
-    pickBtn.title = supportsDirectoryPicker()
+    pickBtn.disabled = false;
+    pickBtn.title = pickerOk
       ? "保存到 D 盘等其他位置（不能选「下载」根目录）"
-      : "当前浏览器不支持文件夹选择";
+      : "当前浏览器扩展页不支持此功能，点击查看说明";
   }
   if (useBtn) useBtn.classList.toggle("active-mode", !hasCustom);
   if (pickBtn) pickBtn.classList.toggle("active-mode", hasCustom);
+  const unsupportedHint = $("downloadFolderPickerUnsupported");
+  if (unsupportedHint) {
+    unsupportedHint.textContent = directoryPickerUnavailableMessage();
+    unsupportedHint.classList.toggle("hidden", pickerOk);
+  }
   const pathLabel = await describeDownloadDirectory(settings.downloadFolder);
   if (label) {
     label.textContent = hasCustom
@@ -2730,6 +2737,10 @@ $("useDownloadFolderBtn").onclick = () => {
   void useBrowserDownloadFolder();
 };
 $("pickDownloadFolder").onclick = async () => {
+  if (!supportsDirectoryPicker()) {
+    setStatus(directoryPickerUnavailableMessage());
+    return;
+  }
   try {
     const handle = await pickDownloadDirectory();
     settings.customDownloadDirectoryName = handle.name;

@@ -20,7 +20,21 @@ function openDirDb(): Promise<IDBDatabase> {
 }
 
 export function supportsDirectoryPicker(): boolean {
-  return typeof window !== "undefined" && "showDirectoryPicker" in window;
+  if (typeof globalThis === "undefined") return false;
+  const picker = (globalThis as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
+  return typeof picker === "function";
+}
+
+export function directoryPickerUnavailableMessage(): string {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const brave = /Brave/i.test(ua);
+  if (brave) {
+    return (
+      "Brave 扩展页面暂不支持「选择其他位置」。请点「使用下载文件夹」保存到默认下载目录；" +
+      "或在上方填写子文件夹名称（如 SafeCallRecorder）。若必须保存到 D 盘等自定义目录，可改用 Chrome 或 Edge。"
+    );
+  }
+  return "当前浏览器不支持文件夹选择。请使用「使用下载文件夹」，或在上方填写下载子文件夹名称。";
 }
 
 export async function getSavedDownloadDirectory(): Promise<FileSystemDirectoryHandle | null> {
@@ -54,7 +68,7 @@ export async function ensureDownloadDirectoryPermission(
 
 export async function pickDownloadDirectory(): Promise<FileSystemDirectoryHandle> {
   if (!supportsDirectoryPicker()) {
-    throw new Error("当前浏览器不支持文件夹选择，请使用 Chrome 或 Edge 最新版。");
+    throw new Error(directoryPickerUnavailableMessage());
   }
   const handle = await window.showDirectoryPicker({ mode: "readwrite" });
   const db = await openDirDb();
