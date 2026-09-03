@@ -944,10 +944,22 @@ async function renameSessionDisplayName(session: Session) {
     current
   );
   if (next == null) return;
+  const trimmed = next.trim();
+  if (!trimmed) {
+    setStatus("名称不能为空。");
+    return;
+  }
+  if (trimmed === current) return;
   try {
-    await ask(MessageType.UpdateSessionDisplayName, { sessionId: session.id, displayName: next });
+    const updated = (await ask(
+      MessageType.UpdateSessionDisplayName,
+      { sessionId: session.id, displayName: trimmed },
+      2
+    )) as Session;
+    patchHistorySession(updated);
+    renderHistory(historyRecords, historyActiveIds, true);
     setStatus("名称已更新。");
-    await reloadHistoryVerified("after_rename");
+    void reloadHistoryVerified("after_rename");
   } catch (e) {
     setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
   }
@@ -1003,15 +1015,35 @@ async function persistAutoStartSettings() {
   await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
 }
 
-async function ask(type: Request["type"], payload: Record<string, unknown> = {}) {
-  const r = await chrome.runtime.sendMessage({
-    type,
-    target: "service-worker",
-    requestId: requestId(),
-    payload
-  } satisfies Request);
-  if (!r?.ok) throw new Error(friendlyError(r?.error?.message || "操作失败"));
-  return r.data;
+async function ask(
+  type: Request["type"],
+  payload: Record<string, unknown> = {},
+  retries = 0
+) {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const r = await chrome.runtime.sendMessage({
+        type,
+        target: "service-worker",
+        requestId: requestId(),
+        payload
+      } satisfies Request);
+      if (!r?.ok) throw new Error(friendlyError(r?.error?.message || "操作失败"));
+      return r.data;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+  }
+  throw lastErr;
+}
+
+function patchHistorySession(session: Session) {
+  const index = historyRecords.findIndex((s) => s.id === session.id);
+  if (index >= 0) historyRecords[index] = { ...historyRecords[index], ...session };
+  else historyRecords.push(session);
+  lastHistoryListKey = "";
 }
 
 function invalidateHistoryReads(reason: string) {
@@ -1563,6 +1595,7 @@ function historyLabel(s: Session) {
 function historySessionKey(s: Session): string {
   return [
     s.id,
+    s.name,
     s.mp3Status,
     s.mp3Progress,
     s.hasMp3 ? "1" : "0",
