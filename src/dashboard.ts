@@ -2209,15 +2209,7 @@ async function stopRecording() {
     $("elapsed").textContent = "00:00";
 
     const mode = result?.mode || settings.stopDownloadMode || "original_then_mp3";
-    let od = result?.originalDownload ?? null;
-    if (
-      !od &&
-      mode !== "mp3_only" &&
-      mode !== "cloud_only" &&
-      settings.autoDownloadOriginal !== false
-    ) {
-      od = await downloadOriginalRecording(id, { trigger: "auto" });
-    }
+    const od = result?.originalDownload ?? null;
     if (mode === "mp3_only") {
       setStatus("已完成（已按设置等待整合 MP3）");
     } else if (mode === "cloud_only") {

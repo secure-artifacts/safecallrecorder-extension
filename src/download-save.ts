@@ -156,6 +156,12 @@ export async function saveDownloadBlob(
   const silentAuto = !saveAs && !requestDirectoryPermission;
   const folder = settings.downloadFolder;
 
+  // Auto-stop saves: always use service worker + chrome.downloads (saveAs:false).
+  // Dashboard/offscreen direct downloads can still trigger Brave save dialogs after await.
+  if (silentAuto && isExtensionContext()) {
+    return saveDownloadBlobViaServiceWorker(blob, filename, folder);
+  }
+
   if (!saveAs) {
     const custom = await writeBlobToDownloadDirectory(blob, filename, folder, requestDirectoryPermission);
     if (custom.ok) {
@@ -218,6 +224,10 @@ export async function saveDownloadUrl(
   const saveAs = !!options?.saveAs;
   const silentAuto = !saveAs && options?.requestDirectoryPermission === false;
   const folder = settings.downloadFolder;
+
+  if (silentAuto && isExtensionContext()) {
+    return saveDownloadUrlViaServiceWorker(url, filename, folder);
+  }
 
   if (hasDownloadsApi()) {
     return saveUrlWithChromeDownloads(url, filename, folder);
