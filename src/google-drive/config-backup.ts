@@ -175,6 +175,25 @@ export function applyGoogleDriveConfig(
   return next;
 }
 
+/** Reset all Google Drive settings (OAuth, folder, upload options). */
+export function clearGoogleDriveSettings(settings: AppSettings): AppSettings {
+  let next: AppSettings = {
+    ...settings,
+    googleDriveEnabled: false,
+    googleDriveUploadMode: "local_and_cloud",
+    googleDriveAutoUploadOnStop: true,
+    googleDriveFolderId: undefined,
+    googleDriveFolderName: undefined,
+    googleDriveAccountEmail: undefined,
+    googleDriveClientId: undefined,
+    googleDriveClientSecret: undefined
+  };
+  if (next.stopDownloadMode === "cloud_only") {
+    next = applyStopDownloadModeToSettings(next, "original_then_mp3");
+  }
+  return next;
+}
+
 export function describeGoogleDriveConfigExport(authSession?: GoogleDriveAuthSessionExport | null): string {
   if (authSession?.refreshToken?.trim()) {
     return "含客户端 ID、密钥与长期登录状态；导入后通常无需再点「连接 Google 账号」。";

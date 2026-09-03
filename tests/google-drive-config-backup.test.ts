@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyGoogleDriveConfig,
   buildGoogleDriveConfigExport,
+  clearGoogleDriveSettings,
   parseGoogleDriveConfig,
   serializeGoogleDriveConfig
 } from "../src/google-drive/config-backup";
@@ -154,6 +155,26 @@ describe("google drive config backup", () => {
     };
     const parsed = parseGoogleDriveConfig(JSON.stringify(doc));
     expect(parsed.authSession?.clientId).toBe("123.apps.googleusercontent.com");
+  });
+
+  it("clears all google drive settings", () => {
+    const cleared = clearGoogleDriveSettings({
+      ...DEFAULT_SETTINGS,
+      stopDownloadMode: "cloud_only",
+      googleDriveEnabled: true,
+      googleDriveUploadMode: "cloud_only",
+      googleDriveAutoUploadOnStop: false,
+      googleDriveFolderId: "folder123",
+      googleDriveFolderName: "我的录音",
+      googleDriveAccountEmail: "user@example.com",
+      googleDriveClientId: "123.apps.googleusercontent.com",
+      googleDriveClientSecret: "GOCSPX-secret"
+    });
+    expect(cleared.googleDriveEnabled).toBe(false);
+    expect(cleared.googleDriveFolderId).toBeUndefined();
+    expect(cleared.googleDriveClientId).toBeUndefined();
+    expect(cleared.googleDriveAccountEmail).toBeUndefined();
+    expect(cleared.stopDownloadMode).toBe("original_then_mp3");
   });
 
   it("builds export document", () => {

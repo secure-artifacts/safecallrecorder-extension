@@ -104,6 +104,7 @@ import { connectGoogleAccount, getAuthSessionForExport } from "./google-drive/au
 import { ensureDefaultDriveFolder } from "./google-drive/drive-api";
 import {
   applyGoogleDriveConfig,
+  clearGoogleDriveSettings,
   describeGoogleDriveConfigExport,
   googleDriveConfigFileName,
   isUsableAuthSessionExport,
@@ -3144,6 +3145,31 @@ $("googleDriveExportConfig").onclick = () => {
   })();
 };
 $("googleDriveImportConfig").onclick = () => $<HTMLInputElement>("googleDriveImportConfigFile").click();
+$("googleDriveClearConfig").onclick = () => {
+  void (async () => {
+    const ok = await showConfirm({
+      title: "确定要清空云端配置吗？",
+      body: "将清除 OAuth 客户端 ID/密钥、Google 登录、文件夹与上传选项，并取消「启用 Google Drive 上传」。此操作不可撤销，清空后需重新配置。",
+      cancelText: "取消",
+      okText: "清空云端配置",
+      danger: true
+    });
+    if (!ok) return;
+    try {
+      await ask(MessageType.GoogleDriveDisconnect).catch(() => undefined);
+      settings = clearGoogleDriveSettings(settings);
+      googleDriveAuthExpiresAt = null;
+      googleDriveAuthHasRefreshToken = false;
+      googleDriveAuthValid = false;
+      await persistDownloadSettings(true);
+      syncDownloadSettingsUi();
+      syncGoogleDriveSettingsUi();
+      setStatus("已清空 Google 云端配置。如需再次使用，请重新填写客户端 ID 并连接账号。");
+    } catch (e) {
+      setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+    }
+  })();
+};
 $("googleDriveImportConfigFile").onchange = async () => {
   const input = $<HTMLInputElement>("googleDriveImportConfigFile");
   const file = input.files?.[0];
