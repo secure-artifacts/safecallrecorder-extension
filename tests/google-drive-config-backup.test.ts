@@ -98,6 +98,16 @@ describe("google drive config backup", () => {
     expect(applied.googleDriveClientSecret).toBe("GOCSPX-secret");
   });
 
+  it("exports credentials from input override when not in settings", () => {
+    const doc = buildGoogleDriveConfigExport(
+      { ...DEFAULT_SETTINGS, googleDriveEnabled: true, googleDriveFolderId: "abc" },
+      null,
+      { clientId: "123.apps.googleusercontent.com", clientSecret: "GOCSPX-from-input" }
+    );
+    expect(doc.googleDrive.clientId).toBe("123.apps.googleusercontent.com");
+    expect(doc.googleDrive.clientSecret).toBe("GOCSPX-from-input");
+  });
+
   it("builds export document", () => {
     const doc = buildGoogleDriveConfigExport({
       ...DEFAULT_SETTINGS,

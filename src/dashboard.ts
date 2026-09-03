@@ -3089,8 +3089,18 @@ $("googleDriveAutoUploadOnStop").onchange = async () => {
 $("googleDriveExportConfig").onclick = () => {
   void (async () => {
     try {
+      flushGoogleDriveCredentialsFromUi();
+      await syncGoogleDriveSettingsToStorage();
       if (!settings.googleDriveFolderId?.trim()) {
         setStatus("请先选择 Google Drive 文件夹后再导出配置。");
+        return;
+      }
+      const exportCredentials = {
+        clientId: $<HTMLInputElement>("googleDriveClientId").value.trim(),
+        clientSecret: $<HTMLInputElement>("googleDriveClientSecret").value.trim()
+      };
+      if (!exportCredentials.clientId) {
+        setStatus("导出失败：请填写 OAuth 客户端 ID。");
         return;
       }
       const authData = (await ask(MessageType.GoogleDriveGetAuthSessionExport)) as {
@@ -3101,7 +3111,7 @@ $("googleDriveExportConfig").onclick = () => {
           refreshToken?: string;
         };
       };
-      const json = serializeGoogleDriveConfig(settings, authData.authSession);
+      const json = serializeGoogleDriveConfig(settings, authData.authSession, exportCredentials);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

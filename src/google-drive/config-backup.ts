@@ -42,22 +42,26 @@ export function isUsableAuthSessionExport(session?: GoogleDriveAuthSessionExport
 
 export function buildGoogleDriveConfigExport(
   settings: AppSettings,
-  authSession?: GoogleDriveAuthSessionExport | null
+  authSession?: GoogleDriveAuthSessionExport | null,
+  credentials?: { clientId?: string; clientSecret?: string }
 ): GoogleDriveConfigExport {
+  const clientId = credentials?.clientId?.trim() || settings.googleDriveClientId?.trim();
+  const clientSecret = credentials?.clientSecret?.trim() || settings.googleDriveClientSecret?.trim();
+  const googleDrive: GoogleDriveConfigExport["googleDrive"] = {
+    enabled: settings.googleDriveEnabled === true,
+    uploadMode: settings.googleDriveUploadMode || "local_and_cloud",
+    autoUploadOnStop: settings.googleDriveAutoUploadOnStop !== false,
+    folderId: settings.googleDriveFolderId,
+    folderName: settings.googleDriveFolderName,
+    accountEmail: settings.googleDriveAccountEmail
+  };
+  if (clientId) googleDrive.clientId = clientId;
+  if (clientSecret) googleDrive.clientSecret = clientSecret;
   return {
     kind: "SafeCallRecorderGoogleDriveConfig",
     version: GOOGLE_DRIVE_CONFIG_VERSION,
     exportedAt: Date.now(),
-    googleDrive: {
-      enabled: settings.googleDriveEnabled === true,
-      uploadMode: settings.googleDriveUploadMode || "local_and_cloud",
-      autoUploadOnStop: settings.googleDriveAutoUploadOnStop !== false,
-      folderId: settings.googleDriveFolderId,
-      folderName: settings.googleDriveFolderName,
-      accountEmail: settings.googleDriveAccountEmail,
-      clientId: settings.googleDriveClientId,
-      clientSecret: settings.googleDriveClientSecret
-    },
+    googleDrive,
     authSession: isUsableAuthSessionExport(authSession) ? authSession! : undefined,
     stopDownloadMode: settings.stopDownloadMode
   };
@@ -65,9 +69,10 @@ export function buildGoogleDriveConfigExport(
 
 export function serializeGoogleDriveConfig(
   settings: AppSettings,
-  authSession?: GoogleDriveAuthSessionExport | null
+  authSession?: GoogleDriveAuthSessionExport | null,
+  credentials?: { clientId?: string; clientSecret?: string }
 ): string {
-  return JSON.stringify(buildGoogleDriveConfigExport(settings, authSession), null, 2);
+  return JSON.stringify(buildGoogleDriveConfigExport(settings, authSession, credentials), null, 2);
 }
 
 export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
