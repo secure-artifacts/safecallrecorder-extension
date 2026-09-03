@@ -2217,6 +2217,7 @@ async function stopRecording() {
       mode !== "cloud_only" &&
       settings.autoDownloadOriginal !== false
     ) {
+      setStatus("正在准备原始录音下载……");
       od = await downloadOriginalRecording(id, { trigger: "auto" });
     }
     if (mode === "mp3_only") {

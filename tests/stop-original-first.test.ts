@@ -37,16 +37,12 @@ describe("stop → original download → background MP3 contract", () => {
     expect(buf[1]).toBe(0x4b);
   });
 
-  it("WebM auto-download runs on dashboard after stop; staging avoids SW deadlock", () => {
-    const offscreen = readFileSync(new URL("../src/offscreen.ts", import.meta.url), "utf8");
-    const dashboard = readFileSync(new URL("../src/dashboard.ts", import.meta.url), "utf8");
+  it("auto-stop prefers local chrome.downloads on dashboard before SW staging", () => {
     const downloadSave = readFileSync(new URL("../src/download-save.ts", import.meta.url), "utf8");
-    const staging = readFileSync(new URL("../src/download-staging.ts", import.meta.url), "utf8");
-    expect(offscreen).not.toMatch(/downloadOriginalRecording\(sessionId, \{ trigger: "auto" \}\)/);
+    const dashboard = readFileSync(new URL("../src/dashboard.ts", import.meta.url), "utf8");
+    expect(downloadSave).toMatch(/silentAuto[\s\S]*hasDownloadsApi\(\)[\s\S]*saveBlobWithChromeDownloads/);
+    expect(downloadSave).toContain("saveDownloadBlobViaServiceWorker");
     expect(dashboard).toContain('downloadOriginalRecording(id, { trigger: "auto" })');
-    expect(downloadSave).toContain("stageDownloadBlob");
-    expect(downloadSave).toContain("saveDownloadBlobFromStaging");
-    expect(staging).toContain("SafeCallRecorderDownloadStaging");
   });
 
   it("recording stop finalizes as completed without processing_mp3", () => {

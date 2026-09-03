@@ -119,6 +119,7 @@ async function saveDownloadBlobViaServiceWorker(
       payload: { stagingId, mimeType: blob.type, filename, downloadFolder }
     } satisfies Request)) as Response;
     if (!res?.ok) {
+      await clearStagedDownloadBlob(stagingId).catch(() => undefined);
       return {
         ok: false,
         error: {
@@ -129,6 +130,7 @@ async function saveDownloadBlobViaServiceWorker(
     }
     return res.data as SaveDownloadResult;
   } catch (e) {
+    await clearStagedDownloadBlob(stagingId).catch(() => undefined);
     return {
       ok: false,
       error: {
@@ -136,8 +138,6 @@ async function saveDownloadBlobViaServiceWorker(
         message: e instanceof Error ? e.message : String(e)
       }
     };
-  } finally {
-    void clearStagedDownloadBlob(stagingId).catch(() => undefined);
   }
 }
 
@@ -175,7 +175,7 @@ export async function saveDownloadBlob(
   const silentAuto = !saveAs && !requestDirectoryPermission;
   const folder = settings.downloadFolder;
 
-  // Auto-stop: prefer already-granted custom folder (silent), else service worker downloads API.
+  // Auto-stop: custom folder (if already granted) → local chrome.downloads → SW staging (offscreen).
   if (silentAuto && isExtensionContext()) {
     const custom = await writeBlobToDownloadDirectory(blob, filename, folder, false);
     if (custom.ok) {
@@ -185,6 +185,9 @@ export async function saveDownloadBlob(
         method: "filesystem",
         pathLabel: custom.pathLabel
       };
+    }
+    if (hasDownloadsApi()) {
+      return saveBlobWithChromeDownloads(blob, filename, folder);
     }
     return saveDownloadBlobViaServiceWorker(blob, filename, folder);
   }
@@ -264,9 +267,15 @@ export async function saveDownloadUrl(
             pathLabel: custom.pathLabel
           };
         }
+        if (hasDownloadsApi()) {
+          return saveBlobWithChromeDownloads(blob, filename, folder);
+        }
       } catch {
-        /* fall through to service worker */
+        /* fall through */
       }
+    }
+    if (hasDownloadsApi()) {
+      return saveUrlWithChromeDownloads(url, filename, folder);
     }
     return saveDownloadUrlViaServiceWorker(url, filename, folder);
   }
