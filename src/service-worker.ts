@@ -14,7 +14,7 @@ import {
 } from "./extension-storage";
 import { openHelpPage } from "./help-nav";
 import { handleGoogleDriveMessage } from "./google-drive/sw-handlers";
-import { saveDownloadBlobFromBuffer, saveUrlWithChromeDownloads } from "./download-save";
+import { saveDownloadBlobFromStaging, saveUrlWithChromeDownloads } from "./download-save";
 import { updateSessionDisplayName } from "./session-display-name";
 
 let creating: Promise<void> | undefined;
@@ -233,12 +233,12 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, reply) => {
 
     if (msg.type === MessageType.SaveDownloadBlob) {
       const payload = msg.payload || {};
-      const buffer = payload.buffer as ArrayBuffer;
-      const mimeType = String(payload.mimeType || "");
+      const stagingId = String(payload.stagingId || "");
       const filename = String(payload.filename || "download");
       const downloadFolder =
         typeof payload.downloadFolder === "string" ? payload.downloadFolder : undefined;
-      const data = await saveDownloadBlobFromBuffer(buffer, mimeType, filename, downloadFolder);
+      if (!stagingId) throw new Error("缺少 stagingId");
+      const data = await saveDownloadBlobFromStaging(stagingId, filename, downloadFolder);
       if (!data.ok) throw new Error(data.error.message);
       return reply({ ok: true, requestId: msg.requestId, data });
     }

@@ -1,8 +1,8 @@
 import { buildDownloadPath } from "./download-path";
 import { writeBlobToDownloadDirectory } from "./download-directory";
+import { clearStagedDownloadBlob, readStagedDownloadBlob, stageDownloadBlob } from "./download-staging";
 import { getSettings, isExtensionContext } from "./extension-storage";
 import { MessageType, requestId, type Request, type Response } from "./messages";
-
 export type SaveDownloadMethod = "filesystem" | "chrome.downloads" | "anchor";
 
 export type SaveDownloadResult =
@@ -87,15 +87,21 @@ export async function saveUrlWithChromeDownloads(
   }
 }
 
-/** Service worker entry — offscreen has no chrome.downloads API. */
-export async function saveDownloadBlobFromBuffer(
-  buffer: ArrayBuffer,
-  mimeType: string,
+/** Service worker entry — reads staged blob from IndexedDB (shared extension origin). */
+export async function saveDownloadBlobFromStaging(
+  stagingId: string,
   filename: string,
   downloadFolder?: string | null
 ): Promise<SaveDownloadResult> {
-  const blob = new Blob([buffer], { type: mimeType || "application/octet-stream" });
-  return saveBlobWithChromeDownloads(blob, filename, downloadFolder);
+  const blob = await readStagedDownloadBlob(stagingId);
+  if (!blob) {
+    return { ok: false, error: { code: "STAGING_MISSING", message: "下载数据已过期，请重试。" } };
+  }
+  try {
+    return await saveBlobWithChromeDownloads(blob, filename, downloadFolder);
+  } finally {
+    void clearStagedDownloadBlob(stagingId).catch(() => undefined);
+  }
 }
 
 async function saveDownloadBlobViaServiceWorker(
@@ -103,23 +109,36 @@ async function saveDownloadBlobViaServiceWorker(
   filename: string,
   downloadFolder?: string | null
 ): Promise<SaveDownloadResult> {
-  const buffer = await blob.arrayBuffer();
-  const res = (await chrome.runtime.sendMessage({
-    type: MessageType.SaveDownloadBlob,
-    target: "service-worker",
-    requestId: requestId(),
-    payload: { buffer, mimeType: blob.type, filename, downloadFolder }
-  } satisfies Request)) as Response;
-  if (!res?.ok) {
+  const stagingId = crypto.randomUUID();
+  await stageDownloadBlob(stagingId, blob);
+  try {
+    const res = (await chrome.runtime.sendMessage({
+      type: MessageType.SaveDownloadBlob,
+      target: "service-worker",
+      requestId: requestId(),
+      payload: { stagingId, mimeType: blob.type, filename, downloadFolder }
+    } satisfies Request)) as Response;
+    if (!res?.ok) {
+      return {
+        ok: false,
+        error: {
+          code: "DOWNLOAD_PROXY_FAILED",
+          message: res?.error?.message || "无法通过后台保存到下载文件夹"
+        }
+      };
+    }
+    return res.data as SaveDownloadResult;
+  } catch (e) {
     return {
       ok: false,
       error: {
         code: "DOWNLOAD_PROXY_FAILED",
-        message: res?.error?.message || "无法通过后台保存到下载文件夹"
+        message: e instanceof Error ? e.message : String(e)
       }
     };
+  } finally {
+    void clearStagedDownloadBlob(stagingId).catch(() => undefined);
   }
-  return res.data as SaveDownloadResult;
 }
 
 async function saveDownloadUrlViaServiceWorker(
@@ -156,12 +175,19 @@ export async function saveDownloadBlob(
   const silentAuto = !saveAs && !requestDirectoryPermission;
   const folder = settings.downloadFolder;
 
-  // Auto-stop saves: always use service worker + chrome.downloads (saveAs:false).
-  // Dashboard/offscreen direct downloads can still trigger Brave save dialogs after await.
+  // Auto-stop: prefer already-granted custom folder (silent), else service worker downloads API.
   if (silentAuto && isExtensionContext()) {
+    const custom = await writeBlobToDownloadDirectory(blob, filename, folder, false);
+    if (custom.ok) {
+      return {
+        ok: true,
+        filename: custom.fileName,
+        method: "filesystem",
+        pathLabel: custom.pathLabel
+      };
+    }
     return saveDownloadBlobViaServiceWorker(blob, filename, folder);
   }
-
   if (!saveAs) {
     const custom = await writeBlobToDownloadDirectory(blob, filename, folder, requestDirectoryPermission);
     if (custom.ok) {
@@ -226,9 +252,24 @@ export async function saveDownloadUrl(
   const folder = settings.downloadFolder;
 
   if (silentAuto && isExtensionContext()) {
+    if (url.startsWith("data:")) {
+      try {
+        const blob = await (await fetch(url)).blob();
+        const custom = await writeBlobToDownloadDirectory(blob, filename, folder, false);
+        if (custom.ok) {
+          return {
+            ok: true,
+            filename: custom.fileName,
+            method: "filesystem",
+            pathLabel: custom.pathLabel
+          };
+        }
+      } catch {
+        /* fall through to service worker */
+      }
+    }
     return saveDownloadUrlViaServiceWorker(url, filename, folder);
   }
-
   if (hasDownloadsApi()) {
     return saveUrlWithChromeDownloads(url, filename, folder);
   }
