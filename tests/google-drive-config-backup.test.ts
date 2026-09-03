@@ -11,6 +11,7 @@ describe("google drive config backup", () => {
   it("exports and imports round-trip", () => {
     const settings = {
       ...DEFAULT_SETTINGS,
+      stopDownloadMode: "cloud_only" as const,
       googleDriveEnabled: true,
       googleDriveUploadMode: "cloud_only" as const,
       googleDriveAutoUploadOnStop: true,
@@ -24,8 +25,11 @@ describe("google drive config backup", () => {
     expect(parsed.googleDrive.folderId).toBe("folder123");
     expect(parsed.googleDrive.clientId).toBe("123.apps.googleusercontent.com");
     expect(parsed.googleDrive.uploadMode).toBe("cloud_only");
-    const applied = applyGoogleDriveConfig(settings, parsed);
+    expect(parsed.stopDownloadMode).toBe("cloud_only");
+    const applied = applyGoogleDriveConfig({ ...DEFAULT_SETTINGS }, parsed);
     expect(applied.googleDriveFolderId).toBe("folder123");
+    expect(applied.stopDownloadMode).toBe("cloud_only");
+    expect(applied.autoDownloadOriginal).toBe(false);
     expect(applied.googleDriveClientId).toBe("123.apps.googleusercontent.com");
     expect(applied.googleDriveAccountEmail).toBeUndefined();
     expect(applied.googleDriveEnabled).toBe(true);

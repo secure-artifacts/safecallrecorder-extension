@@ -14,6 +14,7 @@ import { AudioLevelConfig } from "./audio-level-config";
 import { openInput } from "./device-manager";
 import { DEFAULT_SETTINGS, type AppSettings, type Session, type StopDownloadMode } from "./types";
 import { getSettings } from "./extension-storage";
+import { resolveStopDownloadMode } from "./google-drive/settings";
 
 let levelSubscribers = 0;
 let stopping = false;
@@ -76,7 +77,7 @@ chrome.runtime.onMessage.addListener((m: Request | AudioLevelUpdate, _sender, re
       try {
         const sessionId = String(p.sessionId);
         const settings = await loadSettings();
-        const mode = settings.stopDownloadMode || "original_then_mp3";
+        const mode = resolveStopDownloadMode(settings);
 
         // 1) Finalize capture only — do NOT await MP3.
         await recordings.stop(sessionId);

@@ -91,7 +91,7 @@ import { driveUploadLabel } from "./google-drive/upload-service";
 import { driveLinkLabel, resolveSessionDriveWebUrl } from "./google-drive/drive-links";
 import { copyTextToClipboard } from "./google-drive/clipboard";
 import { onDriveUploadEvent, type DriveUploadEvent } from "./google-drive/upload-events";
-import { googleDriveAccountLabel, isGoogleDriveLinked } from "./google-drive/settings";
+import { googleDriveAccountLabel, isGoogleDriveLinked, resolveStopDownloadMode } from "./google-drive/settings";
 import {
   getGoogleRedirectUri,
   googleDriveSetupHint,
@@ -112,6 +112,7 @@ import {
   waitForMediaReady
 } from "./playback-recovery";
 import { resolveSessionExportName } from "./session-display-name";
+import { applyStopDownloadModeToSettings } from "./stop-download-mode";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const fmt = (ms: number) => {
@@ -2209,7 +2210,7 @@ async function stopRecording() {
     setWaveformMode("preview");
     $("elapsed").textContent = "00:00";
 
-    const mode = result?.mode || settings.stopDownloadMode || "original_then_mp3";
+    const mode = (result?.mode as StopDownloadMode | undefined) || resolveStopDownloadMode(settings);
     let od = result?.originalDownload ?? null;
     if (
       !od &&
@@ -2834,7 +2835,7 @@ $("googleDriveImportConfigFile").onchange = async () => {
     const config = parseGoogleDriveConfig(text);
     settings = applyGoogleDriveConfig(settings, config);
     await persistDownloadSettings();
-    syncGoogleDriveSettingsUi();
+    syncDownloadSettingsUi();
     if (settings.googleDriveEnabled && isGoogleDriveConfigured(settings)) {
       setStatus("配置已导入，正在打开 Google 授权…");
       try {
@@ -2847,11 +2848,14 @@ $("googleDriveImportConfigFile").onchange = async () => {
         if (data.folderId) settings.googleDriveFolderId = data.folderId;
         if (data.folderName) settings.googleDriveFolderName = data.folderName;
         await persistDownloadSettings();
-        syncGoogleDriveSettingsUi();
+        syncDownloadSettingsUi();
         setStatus(`配置已导入并连接 Google 账号：${data.email || ""}`);
       } catch (e) {
+        settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
+        await persistDownloadSettings();
+        syncDownloadSettingsUi();
         setStatus(
-          `配置已导入（文件夹：${settings.googleDriveFolderName || settings.googleDriveFolderId}）。请点「连接 Google 账号」完成授权。`
+          `配置已导入（文件夹：${settings.googleDriveFolderName || settings.googleDriveFolderId}）。Google 尚未授权，已暂时恢复本机下载；请点「连接 Google 账号」后再使用仅云端模式。`
         );
         if (e instanceof Error && e.message) console.warn("[GoogleDriveImport]", e.message);
       }
@@ -2953,26 +2957,7 @@ $("driveFolderCreateBtn").onclick = async () => {
 };
 $("stopDownloadMode").onchange = async () => {
   const mode = $<HTMLSelectElement>("stopDownloadMode").value as StopDownloadMode;
-  settings.stopDownloadMode = mode;
-  if (mode === "original_only") {
-    settings.autoDownloadOriginal = true;
-    settings.autoDownloadMp3AfterSuccess = false;
-    settings.autoDownloadMp3 = false;
-  } else if (mode === "mp3_only") {
-    settings.autoDownloadOriginal = false;
-    settings.autoDownloadMp3AfterSuccess = true;
-    settings.autoDownloadMp3 = true;
-  } else if (mode === "cloud_only") {
-    settings.autoDownloadOriginal = false;
-    settings.autoDownloadMp3AfterSuccess = false;
-    settings.autoDownloadMp3 = false;
-    settings.googleDriveEnabled = true;
-    settings.googleDriveAutoUploadOnStop = true;
-  } else {
-    settings.autoDownloadOriginal = true;
-    settings.autoDownloadMp3AfterSuccess = true;
-    settings.autoDownloadMp3 = true;
-  }
+  settings = applyStopDownloadModeToSettings(settings, mode);
   syncDownloadSettingsUi();
   await persistDownloadSettings();
 };

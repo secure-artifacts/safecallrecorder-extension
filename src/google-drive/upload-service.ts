@@ -6,7 +6,7 @@ import type { Session } from "../types";
 import { buildDriveFileViewUrl } from "./drive-links";
 import { uploadDriveFile } from "./drive-api";
 import { postDriveUploadEvent } from "./upload-events";
-import { hasGoogleDriveFolder, shouldAutoUploadMp3OnStop } from "./settings";
+import { hasGoogleDriveFolder, shouldAutoUploadMp3OnStop, canUploadToGoogleDrive } from "./settings";
 
 const uploadLocks = new Map<string, Promise<DriveUploadResult>>();
 
@@ -43,6 +43,15 @@ export async function uploadSessionMp3ToDrive(
       const settings = await getSettings();
       if (!settings.googleDriveEnabled) {
         return { ok: false, error: { code: "DRIVE_DISABLED", message: "未启用 Google 云端上传" } };
+      }
+      if (!canUploadToGoogleDrive(settings)) {
+        return {
+          ok: false,
+          error: {
+            code: "DRIVE_NOT_AUTHENTICATED",
+            message: "请先连接 Google 账号后再上传到云端（导入配置后需重新授权）。"
+          }
+        };
       }
       const folderId = settings.googleDriveFolderId?.trim();
       if (!folderId) {
@@ -121,6 +130,7 @@ export async function maybeAutoUploadMp3AfterEncode(
   const settings = await getSettings();
   if (!options?.force && !shouldAutoUploadMp3OnStop(settings)) return null;
   if (!hasGoogleDriveFolder(settings)) return null;
+  if (!canUploadToGoogleDrive(settings)) return null;
   return uploadSessionMp3ToDrive(sessionId, "auto", {
     filenameOverride: options?.filenameOverride
   });

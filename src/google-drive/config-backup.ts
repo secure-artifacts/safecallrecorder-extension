@@ -1,4 +1,5 @@
-import type { AppSettings } from "../types";
+import type { AppSettings, StopDownloadMode } from "../types";
+import { applyStopDownloadModeToSettings } from "../stop-download-mode";
 
 export const GOOGLE_DRIVE_CONFIG_VERSION = 1;
 export const GOOGLE_DRIVE_CONFIG_FILENAME = "safecallrecorder-google-drive-config.json";
@@ -16,6 +17,8 @@ export type GoogleDriveConfigExport = {
     accountEmail?: string;
     clientId?: string;
   };
+  /** Optional — restores stop behavior when moving browsers. */
+  stopDownloadMode?: StopDownloadMode;
 };
 
 export function buildGoogleDriveConfigExport(settings: AppSettings): GoogleDriveConfigExport {
@@ -31,7 +34,8 @@ export function buildGoogleDriveConfigExport(settings: AppSettings): GoogleDrive
       folderName: settings.googleDriveFolderName,
       accountEmail: settings.googleDriveAccountEmail,
       clientId: settings.googleDriveClientId
-    }
+    },
+    stopDownloadMode: settings.stopDownloadMode
   };
 }
 
@@ -75,7 +79,14 @@ export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
       folderName: folderName || undefined,
       accountEmail: typeof g.accountEmail === "string" ? g.accountEmail : undefined,
       clientId: clientId || undefined
-    }
+    },
+    stopDownloadMode:
+      doc.stopDownloadMode === "original_only" ||
+      doc.stopDownloadMode === "mp3_only" ||
+      doc.stopDownloadMode === "cloud_only" ||
+      doc.stopDownloadMode === "original_then_mp3"
+        ? doc.stopDownloadMode
+        : undefined
   };
 }
 
@@ -85,7 +96,7 @@ export function applyGoogleDriveConfig(
   config: GoogleDriveConfigExport
 ): AppSettings {
   const g = config.googleDrive;
-  return {
+  let next: AppSettings = {
     ...settings,
     googleDriveEnabled: g.enabled,
     googleDriveUploadMode: g.uploadMode,
@@ -95,6 +106,12 @@ export function applyGoogleDriveConfig(
     googleDriveClientId: g.clientId,
     googleDriveAccountEmail: undefined
   };
+  const stopMode =
+    config.stopDownloadMode ?? (g.uploadMode === "cloud_only" ? "cloud_only" : undefined);
+  if (stopMode) {
+    next = applyStopDownloadModeToSettings(next, stopMode);
+  }
+  return next;
 }
 
 export function googleDriveConfigFileName(exportedAt = Date.now()): string {

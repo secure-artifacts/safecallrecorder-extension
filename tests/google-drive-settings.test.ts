@@ -4,7 +4,9 @@ import {
   shouldAutoUploadMp3OnStop,
   hasGoogleDriveFolder,
   googleDriveAccountLabel,
-  isGoogleDriveLinked
+  isGoogleDriveLinked,
+  canUploadToGoogleDrive,
+  resolveStopDownloadMode
 } from "../src/google-drive/settings";
 import { friendlyGoogleConnectError } from "../src/google-drive/config";
 import { DEFAULT_SETTINGS } from "../src/types";
@@ -62,5 +64,29 @@ describe("google drive settings", () => {
     expect(msg).toContain("Web 应用");
     expect(msg).toContain("重定向 URI 不匹配");
     expect(msg).toContain("chromiumapp.org");
+  });
+
+  it("falls back cloud_only stop when Google not authenticated after import", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      stopDownloadMode: "cloud_only" as const,
+      googleDriveEnabled: true,
+      googleDriveFolderId: "folder123",
+      googleDriveClientId: "123.apps.googleusercontent.com"
+    };
+    expect(canUploadToGoogleDrive(settings)).toBe(false);
+    expect(resolveStopDownloadMode(settings)).toBe("original_then_mp3");
+  });
+
+  it("allows cloud_only stop when authenticated", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      stopDownloadMode: "cloud_only" as const,
+      googleDriveEnabled: true,
+      googleDriveFolderId: "folder123",
+      googleDriveAccountEmail: "user@gmail.com"
+    };
+    expect(canUploadToGoogleDrive(settings)).toBe(true);
+    expect(resolveStopDownloadMode(settings)).toBe("cloud_only");
   });
 });
