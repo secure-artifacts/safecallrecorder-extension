@@ -3614,21 +3614,24 @@ $("clearHistory").onclick = async () => {
       const skipped = result.skippedSessions || result.skippedSessionIds?.length || 0;
 
       if (failedCount > 0) {
-        setStatus(`已删除${deletedIds.length}条录音，${failedCount}条未能删除。`);
+        setStatus(`已删除${deletedIds.length}条录音，${failedCount}条未能删除。`, { scroll: false });
       } else if (skipped > 0) {
         setStatus(
-          `已清除可安全删除的历史 ${deletedIds.length} 条，保留处理中 ${skipped} 条（约 ${(result.reclaimedBytes / (1024 * 1024)).toFixed(1)} MB）。`
+          `已清除可安全删除的历史 ${deletedIds.length} 条，保留处理中 ${skipped} 条（约 ${(result.reclaimedBytes / (1024 * 1024)).toFixed(1)} MB）。`,
+          { scroll: false }
         );
       } else if (deletedIds.length === 0) {
-        setStatus("没有可删除的录音历史。");
+        setStatus("没有可删除的录音历史。", { scroll: false });
       } else {
-        setStatus("已清空全部录音历史。");
+        setStatus("已清空全部录音历史。", { scroll: false });
       }
 
       await reloadHistoryVerified("after_clear");
       return result;
     } catch (e) {
-      setStatus("清空失败，录音历史没有被删除。" + friendlyError(e instanceof Error ? e.message : String(e)));
+      setStatus("清空失败，录音历史没有被删除。" + friendlyError(e instanceof Error ? e.message : String(e)), {
+        scroll: false
+      });
       await reloadHistoryVerified("after_clear_fail");
       throw e;
     } finally {
