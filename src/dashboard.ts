@@ -3387,7 +3387,7 @@ $("googleDriveClearConfig").onclick = () => {
   void (async () => {
     const ok = await showConfirm({
       title: "确定要清空云端配置吗？",
-      body: "将清除 OAuth 客户端 ID/密钥、Google 登录、文件夹与上传选项，并取消「启用 Google Drive 上传」。此操作不可撤销，清空后需重新配置。",
+      body: "将清除 OAuth 客户端 ID/密钥、Google 登录与文件夹设置；「启用 Google Drive 上传」保持当前勾选状态。此操作不可撤销，清空后需重新配置。",
       cancelText: "取消",
       okText: "清空云端配置",
       danger: true

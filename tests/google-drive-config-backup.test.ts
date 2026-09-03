@@ -171,7 +171,7 @@ describe("google drive config backup", () => {
       googleDriveClientId: "123.apps.googleusercontent.com",
       googleDriveClientSecret: "GOCSPX-secret"
     });
-    expect(cleared.googleDriveEnabled).toBe(false);
+    expect(cleared.googleDriveEnabled).toBe(true);
     expect(cleared.googleDriveFolderId).toBeUndefined();
     expect(cleared.googleDriveClientId).toBeUndefined();
     expect(cleared.googleDriveAccountEmail).toBeUndefined();
@@ -188,7 +188,7 @@ describe("google drive config backup", () => {
       googleDriveClientSecret: "GOCSPX-secret",
       googleDriveAccountEmail: "user@example.com"
     });
-    expect(patch.googleDriveEnabled).toBe(false);
+    expect(patch.googleDriveEnabled).toBeUndefined();
     expect(patch.googleDriveFolderId).toBeUndefined();
     expect(patch.googleDriveClientId).toBeUndefined();
     expect(patch.googleDriveClientSecret).toBeUndefined();

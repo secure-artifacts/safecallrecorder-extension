@@ -175,11 +175,10 @@ export function applyGoogleDriveConfig(
   return next;
 }
 
-/** Reset all Google Drive settings (OAuth, folder, upload options). */
+/** Reset Google Drive OAuth/folder/login; keeps the enable toggle unchanged. */
 export function clearGoogleDriveSettings(settings: AppSettings): AppSettings {
   let next: AppSettings = {
     ...settings,
-    googleDriveEnabled: false,
     googleDriveUploadMode: "local_and_cloud",
     googleDriveAutoUploadOnStop: true,
     googleDriveFolderId: undefined,
@@ -198,7 +197,6 @@ export function clearGoogleDriveSettings(settings: AppSettings): AppSettings {
 export function googleDriveSettingsClearPatch(settings: AppSettings): Partial<AppSettings> {
   const cleared = clearGoogleDriveSettings(settings);
   const patch: Partial<AppSettings> = {
-    googleDriveEnabled: false,
     googleDriveUploadMode: "local_and_cloud",
     googleDriveAutoUploadOnStop: true,
     googleDriveFolderId: undefined,
