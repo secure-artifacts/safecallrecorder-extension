@@ -37,14 +37,24 @@ export function resolveStopDownloadMode(settings: AppSettings): StopDownloadMode
   return mode;
 }
 
-/** Linked = saved account email and/or a chosen Drive folder (folder implies OAuth succeeded). */
+/** Linked = saved account email from a completed OAuth connect. */
 export function isGoogleDriveLinked(settings: AppSettings): boolean {
-  return Boolean(settings.googleDriveAccountEmail?.trim() || settings.googleDriveFolderId?.trim());
+  return Boolean(settings.googleDriveAccountEmail?.trim());
 }
 
-export function googleDriveAccountLabel(settings: AppSettings): string {
+export function googleDriveAccountLabel(
+  settings: AppSettings,
+  options?: { authValid?: boolean }
+): string {
   const email = settings.googleDriveAccountEmail?.trim();
-  if (email) return `已连接：${email}`;
-  if (settings.googleDriveFolderId?.trim()) return "已连接 Google 账号";
+  if (email) {
+    if (options?.authValid === false) {
+      return `登录已过期：${email}（请点「连接 Google 账号」）`;
+    }
+    return `已连接：${email}`;
+  }
+  if (settings.googleDriveFolderId?.trim()) {
+    return "未连接 Google 账号（已保存文件夹，请点「连接 Google 账号」）";
+  }
   return "未连接 Google 账号";
 }

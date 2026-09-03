@@ -84,6 +84,20 @@ describe("google drive config backup", () => {
     expect(doc.authSession?.refreshToken).toBe("refresh-abc");
   });
 
+  it("exports client secret in config", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      googleDriveEnabled: true,
+      googleDriveFolderId: "abc",
+      googleDriveClientId: "123.apps.googleusercontent.com",
+      googleDriveClientSecret: "GOCSPX-secret"
+    };
+    const doc = buildGoogleDriveConfigExport(settings);
+    expect(doc.googleDrive.clientSecret).toBe("GOCSPX-secret");
+    const applied = applyGoogleDriveConfig(DEFAULT_SETTINGS, parseGoogleDriveConfig(JSON.stringify(doc)));
+    expect(applied.googleDriveClientSecret).toBe("GOCSPX-secret");
+  });
+
   it("builds export document", () => {
     const doc = buildGoogleDriveConfigExport({
       ...DEFAULT_SETTINGS,

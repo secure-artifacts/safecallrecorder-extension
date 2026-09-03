@@ -38,15 +38,24 @@ describe("google drive settings", () => {
     ).toBe(true);
   });
 
-  it("treats chosen folder as linked for account label", () => {
+  it("does not treat folder alone as linked", () => {
     expect(
       googleDriveAccountLabel({
         ...DEFAULT_SETTINGS,
         googleDriveFolderId: "abc",
         googleDriveFolderName: "9月"
       })
-    ).toBe("已连接 Google 账号");
-    expect(isGoogleDriveLinked({ ...DEFAULT_SETTINGS, googleDriveFolderId: "abc" })).toBe(true);
+    ).toContain("未连接");
+    expect(isGoogleDriveLinked({ ...DEFAULT_SETTINGS, googleDriveFolderId: "abc" })).toBe(false);
+  });
+
+  it("shows expired label when auth invalid", () => {
+    expect(
+      googleDriveAccountLabel(
+        { ...DEFAULT_SETTINGS, googleDriveAccountEmail: "user@gmail.com" },
+        { authValid: false }
+      )
+    ).toContain("登录已过期");
   });
 
   it("prefers email in account label when available", () => {

@@ -24,8 +24,10 @@ export type GoogleDriveConfigExport = {
     folderName?: string;
     accountEmail?: string;
     clientId?: string;
+    /** Enables refresh-token restore on import without Google login popup. */
+    clientSecret?: string;
   };
-  /** Optional — valid ~1h; allows import without OAuth popup on another browser profile. */
+  /** Optional — short-lived access token (~1h) or refresh token (long-lived). */
   authSession?: GoogleDriveAuthSessionExport;
   /** Optional — restores stop behavior when moving browsers. */
   stopDownloadMode?: StopDownloadMode;
@@ -53,7 +55,8 @@ export function buildGoogleDriveConfigExport(
       folderId: settings.googleDriveFolderId,
       folderName: settings.googleDriveFolderName,
       accountEmail: settings.googleDriveAccountEmail,
-      clientId: settings.googleDriveClientId
+      clientId: settings.googleDriveClientId,
+      clientSecret: settings.googleDriveClientSecret
     },
     authSession: isUsableAuthSessionExport(authSession) ? authSession! : undefined,
     stopDownloadMode: settings.stopDownloadMode
@@ -88,6 +91,7 @@ export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
   const folderId = typeof g.folderId === "string" ? g.folderId.trim() : "";
   const folderName = typeof g.folderName === "string" ? g.folderName.trim() : "";
   const clientId = typeof g.clientId === "string" ? g.clientId.trim() : "";
+  const clientSecret = typeof g.clientSecret === "string" ? g.clientSecret.trim() : "";
   if (g.enabled && !folderId) {
     throw new Error("配置文件已启用上传，但缺少 Google Drive 文件夹 ID。");
   }
@@ -120,7 +124,8 @@ export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
       folderId: folderId || undefined,
       folderName: folderName || undefined,
       accountEmail: typeof g.accountEmail === "string" ? g.accountEmail : undefined,
-      clientId: clientId || undefined
+      clientId: clientId || undefined,
+      clientSecret: clientSecret || undefined
     },
     authSession,
     stopDownloadMode:
@@ -147,6 +152,7 @@ export function applyGoogleDriveConfig(
     googleDriveFolderId: g.folderId,
     googleDriveFolderName: g.folderName,
     googleDriveClientId: g.clientId,
+    googleDriveClientSecret: g.clientSecret,
     googleDriveAccountEmail: undefined
   };
   const stopMode =
@@ -155,6 +161,16 @@ export function applyGoogleDriveConfig(
     next = applyStopDownloadModeToSettings(next, stopMode);
   }
   return next;
+}
+
+export function describeGoogleDriveConfigExport(authSession?: GoogleDriveAuthSessionExport | null): string {
+  if (authSession?.refreshToken?.trim()) {
+    return "含客户端 ID、密钥与长期登录状态；导入后通常无需再点「连接 Google 账号」。";
+  }
+  if (isUsableAuthSessionExport(authSession)) {
+    return "含客户端 ID、密钥与短期登录状态（约 1 小时内有效）；请尽快导入。";
+  }
+  return "含客户端 ID 与密钥；导入后需点「连接 Google 账号」授权。";
 }
 
 export function googleDriveConfigFileName(exportedAt = Date.now()): string {

@@ -245,6 +245,7 @@
       </label>
       <div class="google-drive-setup-guide hidden" id="googleDriveSetupGuide">
         <p class="hint google-drive-auth-hint"><strong>创建 OAuth 客户端时会用到（请先复制保存）：</strong><br>扩展 ID：<code id="googleDriveExtensionId">—</code><br>Web 应用重定向 URI：<code id="googleDriveRedirectUri">—</code><br><span class="google-drive-auth-note"><strong>本地加载扩展（dist 目录）完全可以</strong>，扩展 ID 仍是上面这串 32 位字母（你的是 <code>chrome://extensions</code> 卡片里的 ID，<strong>不是</strong> <code>chrome-extension://…/dashboard.html</code> 这种地址）。Google Cloud 里填<strong>重定向 URI</strong>时，用上面的 <code>https://….chromiumapp.org/</code>，<strong>不要</strong>填 <code>chrome-extension://</code> 开头的内容。</span></p>
+        <p class="hint warning google-drive-save-reminder" role="note"><strong>⚠ 请及时保存客户端 ID 与客户端密钥</strong><br>Google Cloud 点「创建」后，弹窗里的<strong>客户端 ID</strong>和<strong>客户端密钥（GOCSPX-…）</strong>请<strong>立刻复制到记事本或密码管理器</strong>。密钥<strong>只显示一次</strong>，关闭弹窗后无法再看完整内容；丢失密钥只能「添加密钥」重新生成，并需重新连接 Google 账号。</p>
         <label class="google-drive-client-row">
           <span>OAuth 客户端 ID</span>
           <input type="text" id="googleDriveClientId" class="google-drive-input" placeholder="123456789-xxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
@@ -253,7 +254,7 @@
           <span>OAuth 客户端密钥</span>
           <input type="password" id="googleDriveClientSecret" class="google-drive-input" placeholder="GOCSPX-…（可选，用于长期授权）" autocomplete="off" spellcheck="false">
         </label>
-        <p class="hint google-drive-client-hint">在 Google Cloud 创建 <strong>Web 应用</strong> 客户端后，复制<strong>客户端 ID</strong> 与<strong>客户端密钥</strong>（密钥只显示一次，请妥善保存）。填写密钥并连接 Google 账号后，可<strong>一次授权、长期自动续期</strong>，无需每小时重连。仅填 ID 时令牌约 1 小时有效。</p>
+        <p class="hint google-drive-client-hint">从 Google Cloud 弹窗复制后，<strong>先粘贴到下方输入框</strong>（自动保存到本机）。建议同时备份到记事本/密码管理器，换电脑或重装扩展时要用。填写密钥并连接 Google 账号后，可<strong>一次授权、长期自动续期</strong>。</p>
 
         <details class="google-drive-setup-tutor" id="googleDriveSetupTutorial">
           <summary class="google-drive-setup-tutor-summary">Google Cloud 详细配置教程<span class="google-drive-setup-tutor-hint">（点击展开 / 收起）</span></summary>
@@ -360,6 +361,7 @@
           <div class="google-drive-setup-body">
             <p class="google-drive-where google-drive-where-warn"><strong>重要：</strong>在控制面板填写「OAuth 客户端 ID」时，必须创建 <strong>Web 应用</strong> 类型并配置重定向 URI。
               若创建的是「Chrome 扩展程序」类型，连接时会报 <strong>redirect_uri_mismatch</strong>（错误 400）。</p>
+            <p class="google-drive-where google-drive-where-warn"><strong>⚠ 创建前请准备记事本：</strong>点「创建」后弹窗会同时给出<strong>客户端 ID</strong>与<strong>客户端密钥</strong>，请<strong>立即复制保存</strong>（密钥只显示一次）。然后再粘贴到本插件输入框。</p>
             <ol class="google-drive-setup-sublist">
               <li>打开：<a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"><strong>→ 凭据 / 客户端页面</strong></a></li>
               <li>点左侧 <strong>客户端</strong> → <strong>创建客户端</strong></li>
@@ -374,10 +376,47 @@
                   <li><strong>不要</strong>填 <code>chrome-extension://…/dashboard.html</code> 这种插件页面地址</li>
                 </ul>
               </li>
-              <li>点 <strong>创建</strong> → 复制弹窗里的 <strong>客户端 ID</strong>（以 <code>.apps.googleusercontent.com</code> 结尾）</li>
-              <li>回到本插件粘贴到 <strong>OAuth 客户端 ID</strong> 输入框 → 等待自动保存</li>
+              <li>点 <strong>创建</strong> → 弹出窗口会同时显示：
+                <ul>
+                  <li><strong>客户端 ID</strong>（以 <code>.apps.googleusercontent.com</code> 结尾）→ 粘贴到本插件 <strong>OAuth 客户端 ID</strong></li>
+                  <li><strong>客户端密钥</strong>（以 <code>GOCSPX-</code> 开头）→ 粘贴到本插件 <strong>OAuth 客户端密钥</strong>（见下一步）</li>
+                </ul>
+              </li>
+              <li>回到本插件粘贴客户端 ID → 等待自动保存</li>
             </ol>
             <p class="google-drive-where"><strong>旧版界面：</strong>☰ → <strong>API 和服务</strong> → <strong>凭据</strong> → <strong>创建凭据</strong> → <strong>OAuth 客户端 ID</strong> → 应用类型选 Web 应用。</p>
+          </div>
+        </details>
+
+        <details class="google-drive-setup-step">
+          <summary>步骤 4.5：获取 OAuth 客户端密钥（推荐 · 一次授权长期有效）</summary>
+          <div class="google-drive-setup-body">
+            <p class="google-drive-where"><strong>为什么需要密钥？</strong>Google 规定：只有「客户端 ID + 客户端密钥」才能换取<strong>长期 refresh token</strong>。只填 ID 时登录约 1 小时过期，需频繁重连。</p>
+            <ol class="google-drive-setup-sublist">
+              <li><strong>创建客户端时</strong>：步骤 4 点「创建」后的弹窗里，除客户端 ID 外还有 <strong>客户端密钥</strong>（格式 <code>GOCSPX-xxxxxxxx</code>）
+                <ul>
+                  <li><strong>立即复制保存</strong>到记事本 — Google <strong>只显示这一次</strong>，关闭弹窗后无法再查看完整密钥</li>
+                  <li>粘贴到本插件上方 <strong>OAuth 客户端密钥</strong> 输入框（密码框，粘贴后自动保存）</li>
+                </ul>
+              </li>
+              <li><strong>若当时没复制、弹窗已关闭</strong>：
+                <ul>
+                  <li>打开 <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"><strong>→ 凭据 / 客户端页面</strong></a></li>
+                  <li>在 <strong>OAuth 2.0 客户端 ID</strong> 列表中，<strong>点你的客户端名称</strong>（如 SafeCallRecorder）进入详情</li>
+                  <li>看页面右侧或下方 <strong>客户端密钥</strong> 区域：
+                    <ul>
+                      <li>若显示「密钥已隐藏」或只有末尾几位 → 点 <strong>添加密钥</strong> 或 <strong>+ 添加密钥</strong></li>
+                      <li>选 <strong>创建新密钥</strong> → 弹出窗口显示新 <code>GOCSPX-…</code> → <strong>立即复制</strong></li>
+                      <li>旧密钥可保留或删除（删除后旧 refresh token 会失效）</li>
+                    </ul>
+                  </li>
+                  <li>将密钥粘贴到本插件 <strong>OAuth 客户端密钥</strong> 输入框</li>
+                </ul>
+              </li>
+              <li>保存密钥后，点 <strong>连接 Google 账号</strong> <strong>重新授权一次</strong>（底部会提示「请重新点连接以启用长期自动续期」）</li>
+              <li>成功后界面显示：<strong>「Google 已长期授权，上传时会自动续期令牌」</strong></li>
+            </ol>
+            <p class="google-drive-where google-drive-where-warn"><strong>安全提示：</strong>客户端密钥相当于应用密码，请勿发到公开群或上传到 GitHub。导出云端配置<strong>会包含</strong> ID、密钥与登录状态，换浏览器导入后通常<strong>无需再登录 Google</strong>；请仅保存在本机私密位置。</p>
           </div>
         </details>
 
@@ -398,8 +437,8 @@
           <summary>步骤 5：回到本插件，连接 Google 并开始上传</summary>
           <div class="google-drive-setup-body">
             <ol class="google-drive-setup-sublist">
-              <li>确认上方 <strong>OAuth 客户端 ID</strong> 仍显示完整内容（以 <code>.apps.googleusercontent.com</code> 结尾），且底部已提示「已保存」</li>
-              <li>勾选 <strong>启用 Google Drive 上传</strong></li>
+              <li>确认 <strong>OAuth 客户端 ID</strong> 已保存；若需长期授权，确认 <strong>OAuth 客户端密钥</strong> 也已填写</li>
+              <li>勾选 <strong>启用 Google Drive 上传</strong>（保持勾选；「断开连接」不会取消此项）</li>
               <li>点 <strong>连接 Google 账号</strong></li>
               <li>在 Google 弹出窗口：选账号 → <strong>继续</strong> → <strong>允许</strong>（若提示「Google 尚未验证此应用」，点 <strong>高级</strong> → <strong>前往 SafeCallRecorder（不安全）</strong>，这是你自建的应用）</li>
               <li>点 <strong>选择 Drive 文件夹</strong> → 进入目标目录 → <strong>选择当前文件夹</strong>；或点 <strong>使用默认文件夹</strong></li>
@@ -408,7 +447,7 @@
           </div>
         </details>
 
-        <p class="hint google-drive-setup-footer">仍有问题？打开插件帮助页「Google 云端上传」。常见错误：① <strong>redirect_uri_mismatch</strong> → 须用「Web 应用」客户端并添加本页显示的重定向 URI；② 粘贴客户端 ID 后变空 → 重新加载扩展后再粘贴；③ 概览页找不到「开始」→ 去<strong>目标对象</strong>配置；④ 访问遭拒 → 在<strong>测试用户</strong>添加你的 Gmail。</p>
+        <p class="hint google-drive-setup-footer">仍有问题？打开插件帮助页「Google 云端上传」。常见错误：① <strong>redirect_uri_mismatch</strong> → 须用「Web 应用」客户端并添加本页显示的重定向 URI；② 粘贴客户端 ID 后变空 → 重新加载扩展后再粘贴；③ 概览页找不到「开始」→ 去<strong>目标对象</strong>配置；④ 访问遭拒 → 在<strong>测试用户</strong>添加你的 Gmail；⑤ 找不到客户端密钥 → 见步骤 4.5「添加密钥」；⑥ 显示已连接但无法上传 → 点「断开连接」后重新「连接 Google 账号」。</p>
           </div>
         </details>
       </div>
@@ -437,8 +476,8 @@
           <button type="button" id="googleDriveImportConfig" class="btn outline small">导入云端配置</button>
           <input type="file" id="googleDriveImportConfigFile" accept=".json,application/json" hidden>
         </div>
-        <p class="hint">换浏览器时：先在本机导出配置，在新浏览器导入。若已启用长期授权，配置文件会含 refresh token，导入并填写相同客户端密钥后可持续自动续期。</p>
-        <p class="hint">配置文件含敏感登录信息，请勿分享或上传到公开位置。客户端 ID 会一并导出。</p>
+        <p class="hint">换浏览器：先<strong>导出云端配置</strong>（含客户端 ID、密钥与登录状态），在新浏览器<strong>导入</strong>后通常可直接上传，无需再点「连接 Google 账号」（须已启用长期授权且 refresh token 仍有效）。</p>
+        <p class="hint warning">配置文件含客户端密钥与登录令牌，等同于账号权限，请勿分享、邮件发送或上传到公开网盘。</p>
         <p class="hint">启用后，MP3 生成完成会自动上传到你选择的 Google Drive 文件夹。历史记录里也可手动点「上传云端」。</p>
       </div>
     </section>

@@ -785,6 +785,11 @@ input[type="text"]:focus, select:focus {
   margin: -4px 0 10px;
   font-size: 12px;
 }
+.google-drive-save-reminder {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
 .google-drive-client-row {
   display: grid;
   grid-template-columns: auto 1fr;

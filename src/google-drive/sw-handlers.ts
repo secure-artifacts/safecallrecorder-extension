@@ -6,6 +6,7 @@ import {
   getGoogleAuthSessionExpiry,
   getGoogleAuthTokenInBackground,
   hasGoogleAuthRefreshToken,
+  isGoogleAuthSessionValid,
   restoreAuthSessionFromExport,
   revokeGoogleAuthToken
 } from "./auth";
@@ -33,20 +34,27 @@ export async function handleGoogleDriveMessage(
   payload: Record<string, unknown> = {}
 ): Promise<unknown> {
   if (type === "GOOGLE_DRIVE_GET_STATUS") {
-    await ensureGoogleAccountEmailSaved().catch(() => undefined);
     const settings = await loadSettings();
+    if (settings.googleDriveEnabled === true) {
+      await ensureGoogleAccountEmailSaved().catch(() => undefined);
+    }
+    const refreshed = await loadSettings();
     const authExpiresAt = await getGoogleAuthSessionExpiry();
     const authHasRefreshToken = await hasGoogleAuthRefreshToken();
+    const authValid = refreshed.googleDriveAccountEmail?.trim()
+      ? await isGoogleAuthSessionValid()
+      : false;
     return {
-      configured: isGoogleDriveConfigured(settings),
-      enabled: settings.googleDriveEnabled === true,
-      connected: isGoogleDriveLinked(settings),
-      email: settings.googleDriveAccountEmail,
-      clientId: settings.googleDriveClientId,
-      folderId: settings.googleDriveFolderId,
-      folderName: settings.googleDriveFolderName,
-      uploadMode: settings.googleDriveUploadMode || "local_and_cloud",
-      autoUploadOnStop: settings.googleDriveAutoUploadOnStop !== false,
+      configured: isGoogleDriveConfigured(refreshed),
+      enabled: refreshed.googleDriveEnabled === true,
+      connected: isGoogleDriveLinked(refreshed),
+      authValid,
+      email: refreshed.googleDriveAccountEmail,
+      clientId: refreshed.googleDriveClientId,
+      folderId: refreshed.googleDriveFolderId,
+      folderName: refreshed.googleDriveFolderName,
+      uploadMode: refreshed.googleDriveUploadMode || "local_and_cloud",
+      autoUploadOnStop: refreshed.googleDriveAutoUploadOnStop !== false,
       authExpiresAt,
       authHasRefreshToken,
       ...getExtensionAuthInfo()
@@ -79,8 +87,7 @@ export async function handleGoogleDriveMessage(
   if (type === "GOOGLE_DRIVE_DISCONNECT") {
     await revokeGoogleAuthToken().catch(() => undefined);
     await saveSettings({
-      googleDriveAccountEmail: undefined,
-      googleDriveEnabled: false
+      googleDriveAccountEmail: undefined
     });
     return { ok: true };
   }
@@ -135,7 +142,8 @@ export async function handleGoogleDriveMessage(
     const session = {
       accessToken: String(raw.accessToken || ""),
       expiresAt: Number(raw.expiresAt || 0),
-      clientId: String(raw.clientId || "")
+      clientId: String(raw.clientId || ""),
+      refreshToken: typeof raw.refreshToken === "string" ? raw.refreshToken : undefined
     };
     return restoreAuthSessionFromExport(session);
   }

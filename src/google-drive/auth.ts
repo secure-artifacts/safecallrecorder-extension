@@ -389,6 +389,18 @@ export async function hasGoogleAuthRefreshToken(): Promise<boolean> {
   return Boolean(cached?.refreshToken && cached.clientId === clientId);
 }
 
+/** Whether cached OAuth tokens can still upload without reconnecting. */
+export async function isGoogleAuthSessionValid(): Promise<boolean> {
+  const settings = await getSettings();
+  if (!settings.googleDriveAccountEmail?.trim()) return false;
+  const clientId = await resolveGoogleClientId(settings);
+  if (!clientId) return false;
+  const cached = await readTokenCache();
+  if (!cached || cached.clientId !== clientId) return false;
+  if (cached.refreshToken?.trim()) return true;
+  return Boolean(cached.accessToken && cached.expiresAt > Date.now() + 30_000);
+}
+
 /** Unix ms when cached Web OAuth token expires, or null if none / wrong client / refresh token active. */
 export async function getGoogleAuthSessionExpiry(): Promise<number | null> {
   if (await hasGoogleAuthRefreshToken()) return null;
