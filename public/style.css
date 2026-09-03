@@ -847,6 +847,15 @@ input[type="text"]:focus, select:focus {
   gap: 8px;
   margin: 10px 0;
 }
+.settings-backup-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.settings-backup-hint {
+  margin: 0 0 10px;
+}
 .top-actions .settings-entry { white-space: nowrap; }
 .history-toolbar {
   display: flex;

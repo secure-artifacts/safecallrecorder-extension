@@ -112,6 +112,15 @@ import {
   serializeGoogleDriveConfig
 } from "./google-drive/config-backup";
 import {
+  applySettingsBackupImport,
+  buildSettingsBackupExport,
+  describeSettingsBackupExport,
+  parseSettingsImport,
+  serializeSettingsBackup,
+  settingsBackupFileName,
+  type SettingsBackupExport
+} from "./settings-backup";
+import {
   formatGoogleAuthExpiryHint,
   isGoogleAuthExpiryWarning
 } from "./google-drive/auth-expiry";
@@ -2636,21 +2645,20 @@ async function persistDownloadSettings(strict = false) {
   await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
 }
 
-async function tryRestoreGoogleAuthFromConfig(
-  config: ReturnType<typeof parseGoogleDriveConfig>
+async function tryRestoreGoogleAuthSession(
+  authSession?: { accessToken: string; expiresAt: number; clientId: string; refreshToken?: string } | null,
+  accountEmail?: string
 ): Promise<boolean> {
-  if (!config.authSession || !isUsableAuthSessionExport(config.authSession)) return false;
+  if (!authSession || !isUsableAuthSessionExport(authSession)) return false;
   try {
     const restored = (await ask(
       MessageType.GoogleDriveRestoreAuthSession,
-      { authSession: config.authSession },
+      { authSession },
       2
     )) as { ok?: boolean; email?: string };
     if (!restored?.ok) return false;
     if (restored.email) settings.googleDriveAccountEmail = restored.email;
-    else if (config.googleDrive.accountEmail) {
-      settings.googleDriveAccountEmail = config.googleDrive.accountEmail;
-    }
+    else if (accountEmail?.trim()) settings.googleDriveAccountEmail = accountEmail.trim();
     await persistDownloadSettings(true);
     syncGoogleDriveSettingsUi();
     await refreshGoogleDriveConnectionStatus();
@@ -2659,6 +2667,176 @@ async function tryRestoreGoogleAuthFromConfig(
     console.warn("[GoogleDriveImport] auth restore failed", e);
     return false;
   }
+}
+
+async function tryRestoreGoogleAuthFromConfig(
+  config: ReturnType<typeof parseGoogleDriveConfig>
+): Promise<boolean> {
+  return tryRestoreGoogleAuthSession(config.authSession, config.googleDrive.accountEmail);
+}
+
+function syncAllSettingsUi() {
+  syncRecordingNameProfilesUi();
+  syncDownloadSettingsUi();
+  syncAutoStartSettingsUi();
+  const sens = $<HTMLSelectElement>("detectionSensitivity");
+  if (sens) sens.value = settings.detectionSensitivity || "standard";
+  const def = $<HTMLSelectElement>("defaultBitrate");
+  if (def) def.value = String(settings.defaultBitrate || DEFAULT_BITRATE);
+  $<HTMLSelectElement>("bitrate").value = String(settings.defaultBitrate || DEFAULT_BITRATE);
+  updateBitrateCard();
+  syncGoogleDriveSettingsUi();
+}
+
+async function importGoogleDriveConfigPayload(config: ReturnType<typeof parseGoogleDriveConfig>) {
+  settings = applyGoogleDriveConfig(settings, config);
+  syncGoogleDriveSettingsUi();
+  await syncGoogleDriveSettingsToStorage();
+  syncDownloadSettingsUi();
+
+  const authRestored = await tryRestoreGoogleAuthFromConfig(config);
+  if (!authRestored) await refreshGoogleDriveConnectionStatus();
+
+  if (authRestored && canUploadToGoogleDrive(settings)) {
+    setStatus(
+      `配置已导入，云端上传已就绪（${settings.googleDriveAccountEmail || "已恢复登录"}），无需重新登录 Google。`
+    );
+    return;
+  }
+
+  if (config.authSession && !authRestored) {
+    const needsSecret = Boolean(
+      config.authSession.refreshToken?.trim() && !config.googleDrive.clientSecret?.trim()
+    );
+    if (needsSecret) {
+      setStatus(
+        "配置已导入，但缺少客户端密钥，无法恢复长期登录。请填写密钥后点「连接 Google 账号」。"
+      );
+      if (settings.stopDownloadMode === "cloud_only") {
+        settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
+        await persistDownloadSettings();
+        syncDownloadSettingsUi();
+      }
+      return;
+    }
+    if (settings.googleDriveEnabled && isGoogleDriveConfigured(settings)) {
+      try {
+        setStatus("配置已导入，登录状态无效，正在打开 Google 授权…");
+        const data = await connectGoogleDriveAccount();
+        setStatus(`配置已导入并连接 Google 账号：${data.email || ""}`);
+        return;
+      } catch (e) {
+        setStatus(friendlyGoogleConnectError(e instanceof Error ? e.message : String(e)));
+        if (settings.stopDownloadMode === "cloud_only") {
+          settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
+          await persistDownloadSettings();
+          syncDownloadSettingsUi();
+        }
+        return;
+      }
+    }
+    setStatus("配置已导入，但登录状态已过期或无效，请点「连接 Google 账号」。");
+    if (settings.stopDownloadMode === "cloud_only") {
+      settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
+      await persistDownloadSettings();
+      syncDownloadSettingsUi();
+    }
+    return;
+  }
+
+  if (settings.googleDriveEnabled && isGoogleDriveConfigured(settings)) {
+    try {
+      setStatus("配置已导入，正在打开 Google 授权…");
+      const data = await connectGoogleDriveAccount();
+      setStatus(`配置已导入并连接 Google 账号：${data.email || ""}`);
+    } catch (e) {
+      settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
+      await persistDownloadSettings();
+      syncDownloadSettingsUi();
+      setStatus(
+        `配置已导入（文件夹：${settings.googleDriveFolderName || settings.googleDriveFolderId}）。${friendlyGoogleConnectError(e instanceof Error ? e.message : String(e))}`
+      );
+    }
+  } else {
+    setStatus(
+      `配置已导入（文件夹：${settings.googleDriveFolderName || settings.googleDriveFolderId || "—"}）。${isGoogleDriveConfigured(settings) ? "请点「连接 Google 账号」。" : googleDriveSetupHint()}`
+    );
+  }
+}
+
+async function importFullSettingsBackup(doc: SettingsBackupExport) {
+  settings = applySettingsBackupImport(doc);
+  await persistDownloadSettings(true);
+  syncAllSettingsUi();
+
+  const authRestored = await tryRestoreGoogleAuthSession(
+    doc.authSession,
+    doc.settings.googleDriveAccountEmail
+  );
+  if (!authRestored) await refreshGoogleDriveConnectionStatus();
+
+  const folderHint = settings.customDownloadDirectoryName
+    ? `自定义保存路径「${settings.customDownloadDirectoryName}」需重新点「选择其他位置…」授权。`
+    : "";
+  if (authRestored && settings.googleDriveEnabled && canUploadToGoogleDrive(settings)) {
+    setStatus(
+      `全部设置已导入，Google 云端已就绪（${settings.googleDriveAccountEmail || "已恢复登录"}）。${folderHint}`
+    );
+    return;
+  }
+  if (settings.googleDriveEnabled && doc.authSession && !authRestored) {
+    const needsSecret = Boolean(
+      doc.authSession.refreshToken?.trim() && !settings.googleDriveClientSecret?.trim()
+    );
+    if (needsSecret) {
+      setStatus(
+        `全部设置已导入，但缺少客户端密钥，无法恢复 Google 登录。请填写密钥后点「连接 Google 账号」。${folderHint}`
+      );
+      if (settings.stopDownloadMode === "cloud_only") {
+        settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
+        await persistDownloadSettings();
+        syncDownloadSettingsUi();
+      }
+      return;
+    }
+    if (isGoogleDriveConfigured(settings)) {
+      try {
+        setStatus("全部设置已导入，正在打开 Google 授权…");
+        const data = await connectGoogleDriveAccount();
+        setStatus(`全部设置已导入并连接 Google 账号：${data.email || ""}。${folderHint}`);
+        return;
+      } catch (e) {
+        setStatus(
+          `全部设置已导入。${friendlyGoogleConnectError(e instanceof Error ? e.message : String(e))} ${folderHint}`
+        );
+        if (settings.stopDownloadMode === "cloud_only") {
+          settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
+          await persistDownloadSettings();
+          syncDownloadSettingsUi();
+        }
+        return;
+      }
+    }
+  }
+  setStatus(`全部设置已导入。${folderHint}`.trim());
+}
+
+async function fetchAuthSessionForExport(clientId: string) {
+  let authSession =
+    (
+      (await ask(MessageType.GoogleDriveGetAuthSessionExport)) as {
+        authSession?: {
+          accessToken: string;
+          expiresAt: number;
+          clientId: string;
+          refreshToken?: string;
+        };
+      }
+    ).authSession ?? (await getAuthSessionForExport());
+  if (authSession && clientId) {
+    authSession = { ...authSession, clientId };
+  }
+  return authSession;
 }
 
 /** Run OAuth in the dashboard page so Brave/Chrome can show the Google popup reliably. */
@@ -2930,6 +3108,69 @@ $("localMediaPlaylist").addEventListener("drop", (e) => {
 $("start").onclick = () => void startRecording();
 $("stop").onclick = () => void stopRecording();
 $("settingsBtn").onclick = () => $("settingsPanel").classList.toggle("hidden");
+$("exportAllSettings").onclick = () => {
+  void (async () => {
+    try {
+      flushGoogleDriveCredentialsFromUi();
+      await syncGoogleDriveSettingsToStorage();
+      const exportClientId = $<HTMLInputElement>("googleDriveClientId").value.trim();
+      const authSession = exportClientId
+        ? await fetchAuthSessionForExport(exportClientId)
+        : await fetchAuthSessionForExport(settings.googleDriveClientId?.trim() || "");
+      if (
+        settings.googleDriveEnabled &&
+        isGoogleDriveLinked(settings) &&
+        !isUsableAuthSessionExport(authSession)
+      ) {
+        setStatus(
+          "导出失败：Google 登录无法备份。请填写客户端密钥后重新点「连接 Google 账号」完成长期授权，再导出。"
+        );
+        return;
+      }
+      const doc = buildSettingsBackupExport(settings, authSession);
+      const json = JSON.stringify(doc, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = settingsBackupFileName(doc.exportedAt);
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      const detail = describeSettingsBackupExport(authSession);
+      setStatus(`全部设置已导出（${detail}）此文件含 Google 密钥与登录信息，请勿分享或上传到公开位置。`);
+    } catch (e) {
+      setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+    }
+  })();
+};
+$("importAllSettings").onclick = () => $<HTMLInputElement>("importAllSettingsFile").click();
+$("importAllSettingsFile").onchange = async () => {
+  const input = $<HTMLInputElement>("importAllSettingsFile");
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  const confirmed = await showConfirm({
+    title: "导入全部设置？",
+    body: `将用「${file.name}」中的设置替换当前全部选项（含 Google 云端、命名方案、下载方式等）。现有设置会被覆盖。`,
+    cancelText: "取消",
+    okText: "开始导入"
+  });
+  if (!confirmed) return;
+  try {
+    const text = await file.text();
+    const payload = parseSettingsImport(text);
+    if (payload.type === "full") {
+      await importFullSettingsBackup(payload.doc);
+      return;
+    }
+    await importGoogleDriveConfigPayload(payload.doc);
+  } catch (e) {
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+  }
+};
 $("helpBtn").onclick = () => void openHelpOrAsk();
 $("helpDevicesLink").onclick = () => void openHelpOrAsk("devices");
 $("helpNameLink").onclick = () => void openHelpOrAsk("name");
@@ -3104,20 +3345,7 @@ $("googleDriveExportConfig").onclick = () => {
         setStatus("导出失败：请填写 OAuth 客户端 ID。");
         return;
       }
-      let authSession =
-        (
-          (await ask(MessageType.GoogleDriveGetAuthSessionExport)) as {
-            authSession?: {
-              accessToken: string;
-              expiresAt: number;
-              clientId: string;
-              refreshToken?: string;
-            };
-          }
-        ).authSession ?? (await getAuthSessionForExport());
-      if (authSession && exportCredentials.clientId) {
-        authSession = { ...authSession, clientId: exportCredentials.clientId };
-      }
+      let authSession = await fetchAuthSessionForExport(exportCredentials.clientId);
       if (isGoogleDriveLinked(settings) && !isUsableAuthSessionExport(authSession)) {
         setStatus(
           "导出失败：当前 Google 登录无法备份。请填写客户端密钥后重新点「连接 Google 账号」完成长期授权，再导出。"
@@ -3178,83 +3406,7 @@ $("googleDriveImportConfigFile").onchange = async () => {
   try {
     const text = await file.text();
     const config = parseGoogleDriveConfig(text);
-    settings = applyGoogleDriveConfig(settings, config);
-    syncGoogleDriveSettingsUi();
-    await syncGoogleDriveSettingsToStorage();
-    syncDownloadSettingsUi();
-
-    const authRestored = await tryRestoreGoogleAuthFromConfig(config);
-    if (!authRestored) {
-      await refreshGoogleDriveConnectionStatus();
-    }
-
-    if (authRestored && canUploadToGoogleDrive(settings)) {
-      setStatus(
-        `配置已导入，云端上传已就绪（${settings.googleDriveAccountEmail || "已恢复登录"}），无需重新登录 Google。`
-      );
-      return;
-    }
-
-    if (config.authSession && !authRestored) {
-      const needsSecret = Boolean(
-        config.authSession.refreshToken?.trim() && !config.googleDrive.clientSecret?.trim()
-      );
-      if (needsSecret) {
-        setStatus(
-          "配置已导入，但缺少客户端密钥，无法恢复长期登录。请填写密钥后点「连接 Google 账号」。"
-        );
-        if (settings.stopDownloadMode === "cloud_only") {
-          settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
-          await persistDownloadSettings();
-          syncDownloadSettingsUi();
-        }
-        return;
-      }
-      if (settings.googleDriveEnabled && isGoogleDriveConfigured(settings)) {
-        try {
-          setStatus("配置已导入，登录状态无效，正在打开 Google 授权…");
-          const data = await connectGoogleDriveAccount();
-          setStatus(`配置已导入并连接 Google 账号：${data.email || ""}`);
-          return;
-        } catch (e) {
-          setStatus(
-            friendlyGoogleConnectError(e instanceof Error ? e.message : String(e))
-          );
-          if (settings.stopDownloadMode === "cloud_only") {
-            settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
-            await persistDownloadSettings();
-            syncDownloadSettingsUi();
-          }
-          return;
-        }
-      }
-      setStatus("配置已导入，但登录状态已过期或无效，请点「连接 Google 账号」。");
-      if (settings.stopDownloadMode === "cloud_only") {
-        settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
-        await persistDownloadSettings();
-        syncDownloadSettingsUi();
-      }
-      return;
-    }
-
-    if (settings.googleDriveEnabled && isGoogleDriveConfigured(settings)) {
-      try {
-        setStatus("配置已导入，正在打开 Google 授权…");
-        const data = await connectGoogleDriveAccount();
-        setStatus(`配置已导入并连接 Google 账号：${data.email || ""}`);
-      } catch (e) {
-        settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
-        await persistDownloadSettings();
-        syncDownloadSettingsUi();
-        setStatus(
-          `配置已导入（文件夹：${settings.googleDriveFolderName || settings.googleDriveFolderId}）。${friendlyGoogleConnectError(e instanceof Error ? e.message : String(e))}`
-        );
-      }
-    } else {
-      setStatus(
-        `配置已导入（文件夹：${settings.googleDriveFolderName || settings.googleDriveFolderId || "—"}）。${isGoogleDriveConfigured(settings) ? "请点「连接 Google 账号」。" : googleDriveSetupHint()}`
-      );
-    }
+    await importGoogleDriveConfigPayload(config);
   } catch (e) {
     setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
   }

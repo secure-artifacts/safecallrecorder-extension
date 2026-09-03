@@ -36,6 +36,13 @@
     </div>
 
     <div id="settingsPanel" class="settings hidden">
+      <div class="settings-backup-toolbar">
+        <button type="button" id="exportAllSettings" class="btn outline small">导出全部设置</button>
+        <button type="button" id="importAllSettings" class="btn outline small">导入全部设置</button>
+        <input type="file" id="importAllSettingsFile" accept=".json,application/json" hidden>
+      </div>
+      <p class="hint settings-backup-hint">一键备份/恢复<strong>全部选项</strong>（下载方式、命名方案、Google 云端 ID/密钥/文件夹/登录状态等）。换浏览器时导入此文件即可同步。录音历史请用下方「导出备份」单独迁移；自定义保存路径导入后需重新点「选择其他位置…」。</p>
+      <p class="hint warning settings-backup-hint">设置文件含 Google 客户端密钥与登录令牌，请勿分享或上传到公开位置。</p>
       <label class="row">停止录音后的下载方式
         <select id="stopDownloadMode">
           <option value="original_then_mp3">立即下载原始录音，并在后台生成整合 MP3（推荐）</option>
