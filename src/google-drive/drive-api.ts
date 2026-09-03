@@ -1,5 +1,5 @@
 import { DRIVE_API, DRIVE_UPLOAD } from "./config";
-import { getGoogleAuthToken } from "./auth";
+import { clearGoogleTokenCache, getGoogleAuthToken } from "./auth";
 
 export type DriveFolder = { id: string; name: string; parents?: string[] };
 
@@ -8,12 +8,29 @@ async function authHeaders(interactive: boolean): Promise<HeadersInit> {
   return { Authorization: `Bearer ${token}` };
 }
 
+async function fetchDrive(
+  url: string,
+  init: RequestInit,
+  interactive: boolean
+): Promise<Response> {
+  const res = await fetch(url, {
+    ...init,
+    headers: { ...(await authHeaders(interactive)), ...(init.headers as Record<string, string> | undefined) }
+  });
+  if (res.status !== 401 || interactive) return res;
+  await clearGoogleTokenCache();
+  return fetch(url, {
+    ...init,
+    headers: { ...(await authHeaders(false)), ...(init.headers as Record<string, string> | undefined) }
+  });
+}
+
 export async function listDriveFolders(parentId?: string): Promise<DriveFolder[]> {
   const q = parentId
     ? `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
     : `mimeType='application/vnd.google-apps.folder' and trashed=false and 'root' in parents`;
   const url = `${DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=files(id,name,parents)&pageSize=100&orderBy=folder,name`;
-  const res = await fetch(url, { headers: await authHeaders(false) });
+  const res = await fetchDrive(url, {}, false);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`无法列出 Google Drive 文件夹：${text || res.statusText}`);
@@ -28,14 +45,11 @@ export async function createDriveFolder(name: string, parentId?: string): Promis
     mimeType: "application/vnd.google-apps.folder"
   };
   if (parentId) body.parents = [parentId];
-  const res = await fetch(`${DRIVE_API}/files`, {
+  const res = await fetchDrive(`${DRIVE_API}/files`, {
     method: "POST",
-    headers: {
-      ...(await authHeaders(true)),
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
-  });
+  }, true);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`无法创建文件夹：${text || res.statusText}`);
@@ -58,18 +72,15 @@ export async function uploadDriveFile(
   folderId: string,
   onProgress?: (loaded: number, total: number) => void
 ): Promise<{ id: string; name: string; webViewLink?: string }> {
-  const init = await fetch(`${DRIVE_UPLOAD}/files?uploadType=resumable&fields=id,name,webViewLink`, {
+  const init = await fetchDrive(`${DRIVE_UPLOAD}/files?uploadType=resumable&fields=id,name,webViewLink`, {
     method: "POST",
-    headers: {
-      ...(await authHeaders(false)),
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: fileName,
       parents: [folderId],
       mimeType
     })
-  });
+  }, false);
   if (!init.ok) {
     const text = await init.text();
     throw new Error(`无法开始上传：${text || init.statusText}`);

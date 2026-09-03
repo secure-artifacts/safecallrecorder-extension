@@ -178,6 +178,8 @@ export interface AppSettings {
   googleDriveAccountEmail?: string;
   /** OAuth client ID entered in UI; overrides manifest when set. */
   googleDriveClientId?: string;
+  /** OAuth client secret for Web app — enables refresh-token (long-lived) auth. */
+  googleDriveClientSecret?: string;
   /** Recording name builder (date / daily number / custom). */
   recordingName?: Partial<RecordingNameConfig>;
   /** Multiple naming schemes; active profile used when starting new recordings. */

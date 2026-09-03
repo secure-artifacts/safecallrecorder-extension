@@ -249,7 +249,11 @@
           <span>OAuth 客户端 ID</span>
           <input type="text" id="googleDriveClientId" class="google-drive-input" placeholder="123456789-xxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
         </label>
-        <p class="hint google-drive-client-hint">在 Google Cloud 创建客户端后，复制弹窗里的<strong>客户端 ID</strong>（以 <code>.apps.googleusercontent.com</code> 结尾），粘贴到上方输入框。粘贴后会<strong>自动保存</strong>；若未保存，点击输入框外或按 Tab 即可。保存成功时底部状态栏会提示「客户端 ID 已保存」。</p>
+        <label class="google-drive-client-row">
+          <span>OAuth 客户端密钥</span>
+          <input type="password" id="googleDriveClientSecret" class="google-drive-input" placeholder="GOCSPX-…（可选，用于长期授权）" autocomplete="off" spellcheck="false">
+        </label>
+        <p class="hint google-drive-client-hint">在 Google Cloud 创建 <strong>Web 应用</strong> 客户端后，复制<strong>客户端 ID</strong> 与<strong>客户端密钥</strong>（密钥只显示一次，请妥善保存）。填写密钥并连接 Google 账号后，可<strong>一次授权、长期自动续期</strong>，无需每小时重连。仅填 ID 时令牌约 1 小时有效。</p>
 
         <details class="google-drive-setup-tutor" id="googleDriveSetupTutorial">
           <summary class="google-drive-setup-tutor-summary">Google Cloud 详细配置教程<span class="google-drive-setup-tutor-hint">（点击展开 / 收起）</span></summary>
@@ -433,7 +437,7 @@
           <button type="button" id="googleDriveImportConfig" class="btn outline small">导入云端配置</button>
           <input type="file" id="googleDriveImportConfigFile" accept=".json,application/json" hidden>
         </div>
-        <p class="hint">换浏览器时：先在本机导出配置，在新浏览器导入。若导出时已连接 Google，配置文件会含<strong>约 1 小时有效</strong>的登录状态，导入后可直接上传；过期后需再点「连接 Google 账号」。</p>
+        <p class="hint">换浏览器时：先在本机导出配置，在新浏览器导入。若已启用长期授权，配置文件会含 refresh token，导入并填写相同客户端密钥后可持续自动续期。</p>
         <p class="hint">配置文件含敏感登录信息，请勿分享或上传到公开位置。客户端 ID 会一并导出。</p>
         <p class="hint">启用后，MP3 生成完成会自动上传到你选择的 Google Drive 文件夹。历史记录里也可手动点「上传云端」。</p>
       </div>

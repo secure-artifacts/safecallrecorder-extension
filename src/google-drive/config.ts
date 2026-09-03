@@ -37,6 +37,19 @@ export async function resolveGoogleClientId(settings?: AppSettings): Promise<str
   return getManifestOAuthClientId();
 }
 
+export function resolveGoogleClientSecret(settings?: AppSettings): string | undefined {
+  const fromSettings = settings?.googleDriveClientSecret?.trim();
+  if (fromSettings) return fromSettings;
+  return undefined;
+}
+
+export async function resolveGoogleClientSecretAsync(settings?: AppSettings): Promise<string | undefined> {
+  const fromSettings = settings?.googleDriveClientSecret?.trim();
+  if (fromSettings) return fromSettings;
+  const loaded = await getSettings();
+  return loaded.googleDriveClientSecret?.trim() || undefined;
+}
+
 export function usesUiOAuthClientId(settings?: AppSettings): boolean {
   const id = settings?.googleDriveClientId?.trim();
   return Boolean(id);

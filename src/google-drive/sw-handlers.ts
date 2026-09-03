@@ -5,6 +5,7 @@ import {
   getExtensionAuthInfo,
   getGoogleAuthSessionExpiry,
   getGoogleAuthTokenInBackground,
+  hasGoogleAuthRefreshToken,
   restoreAuthSessionFromExport,
   revokeGoogleAuthToken
 } from "./auth";
@@ -35,6 +36,7 @@ export async function handleGoogleDriveMessage(
     await ensureGoogleAccountEmailSaved().catch(() => undefined);
     const settings = await loadSettings();
     const authExpiresAt = await getGoogleAuthSessionExpiry();
+    const authHasRefreshToken = await hasGoogleAuthRefreshToken();
     return {
       configured: isGoogleDriveConfigured(settings),
       enabled: settings.googleDriveEnabled === true,
@@ -46,6 +48,7 @@ export async function handleGoogleDriveMessage(
       uploadMode: settings.googleDriveUploadMode || "local_and_cloud",
       autoUploadOnStop: settings.googleDriveAutoUploadOnStop !== false,
       authExpiresAt,
+      authHasRefreshToken,
       ...getExtensionAuthInfo()
     };
   }

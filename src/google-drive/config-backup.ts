@@ -8,6 +8,8 @@ export type GoogleDriveAuthSessionExport = {
   accessToken: string;
   expiresAt: number;
   clientId: string;
+  /** Long-lived — allows auto-renewal after import when client secret is also configured. */
+  refreshToken?: string;
 };
 
 export type GoogleDriveConfigExport = {
@@ -30,7 +32,9 @@ export type GoogleDriveConfigExport = {
 };
 
 export function isUsableAuthSessionExport(session?: GoogleDriveAuthSessionExport | null): boolean {
-  if (!session?.accessToken?.trim() || !session.clientId?.trim()) return false;
+  if (!session?.clientId?.trim()) return false;
+  if (session.refreshToken?.trim()) return true;
+  if (!session.accessToken?.trim()) return false;
   return session.expiresAt > Date.now() + 30_000;
 }
 
@@ -93,8 +97,16 @@ export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
     const accessToken = typeof authRaw.accessToken === "string" ? authRaw.accessToken.trim() : "";
     const clientIdAuth = typeof authRaw.clientId === "string" ? authRaw.clientId.trim() : "";
     const expiresAt = typeof authRaw.expiresAt === "number" ? authRaw.expiresAt : 0;
-    if (accessToken && clientIdAuth && expiresAt > 0) {
-      authSession = { accessToken, expiresAt, clientId: clientIdAuth };
+    const refreshToken =
+      typeof authRaw.refreshToken === "string" ? authRaw.refreshToken.trim() : "";
+    const candidate: GoogleDriveAuthSessionExport = {
+      accessToken,
+      expiresAt,
+      clientId: clientIdAuth,
+      refreshToken: refreshToken || undefined
+    };
+    if (isUsableAuthSessionExport(candidate)) {
+      authSession = candidate;
     }
   }
   return {

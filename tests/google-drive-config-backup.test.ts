@@ -71,6 +71,19 @@ describe("google drive config backup", () => {
     expect(doc.authSession).toBeUndefined();
   });
 
+  it("keeps refresh token in export even when access token expired", () => {
+    const doc = buildGoogleDriveConfigExport(
+      { ...DEFAULT_SETTINGS, googleDriveEnabled: true, googleDriveFolderId: "abc" },
+      {
+        accessToken: "x",
+        expiresAt: Date.now() - 1000,
+        clientId: "123.apps.googleusercontent.com",
+        refreshToken: "refresh-abc"
+      }
+    );
+    expect(doc.authSession?.refreshToken).toBe("refresh-abc");
+  });
+
   it("builds export document", () => {
     const doc = buildGoogleDriveConfigExport({
       ...DEFAULT_SETTINGS,

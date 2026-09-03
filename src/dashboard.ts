@@ -135,6 +135,7 @@ let recording = false;
 let busy = false;
 let settings: AppSettings = { ...DEFAULT_SETTINGS };
 let googleDriveAuthExpiresAt: number | null = null;
+let googleDriveAuthHasRefreshToken = false;
 let preview: { stream: MediaStream; monitor: StreamLevelMonitor } | undefined;
 let elapsedTimer: ReturnType<typeof setInterval> | undefined;
 let startedAt = 0;
@@ -2398,6 +2399,7 @@ function applyGoogleDriveEmail(email?: string) {
 async function refreshGoogleDriveConnectionStatus() {
   if (!settings.googleDriveEnabled) {
     googleDriveAuthExpiresAt = null;
+    googleDriveAuthHasRefreshToken = false;
     syncGoogleDriveSettingsUi();
     return;
   }
@@ -2405,9 +2407,11 @@ async function refreshGoogleDriveConnectionStatus() {
     const data = (await ask(MessageType.GoogleDriveGetStatus)) as {
       email?: string;
       authExpiresAt?: number | null;
+      authHasRefreshToken?: boolean;
     };
     applyGoogleDriveEmail(data.email);
     googleDriveAuthExpiresAt = data.authExpiresAt ?? null;
+    googleDriveAuthHasRefreshToken = data.authHasRefreshToken === true;
   } catch {
     /* keep local settings */
   }
@@ -2418,7 +2422,11 @@ function renderGoogleDriveAuthExpiryHint() {
   const el = $("googleDriveAuthExpiryHint");
   if (!el) return;
   const linked = isGoogleDriveLinked(settings);
-  const hint = linked ? formatGoogleAuthExpiryHint(googleDriveAuthExpiresAt) : null;
+  const hint = linked
+    ? formatGoogleAuthExpiryHint(googleDriveAuthExpiresAt, {
+        hasRefreshToken: googleDriveAuthHasRefreshToken
+      })
+    : null;
   if (!hint) {
     el.textContent = "";
     el.classList.add("hidden");
@@ -2427,7 +2435,10 @@ function renderGoogleDriveAuthExpiryHint() {
   }
   el.textContent = hint;
   el.classList.remove("hidden");
-  el.classList.toggle("warning", isGoogleAuthExpiryWarning(googleDriveAuthExpiresAt));
+  el.classList.toggle(
+    "warning",
+    !googleDriveAuthHasRefreshToken && isGoogleAuthExpiryWarning(googleDriveAuthExpiresAt)
+  );
 }
 
 function syncGoogleDriveSettingsUi() {
@@ -2436,6 +2447,10 @@ function syncGoogleDriveSettingsUi() {
   const clientInput = $<HTMLInputElement>("googleDriveClientId");
   if (clientInput && document.activeElement !== clientInput) {
     clientInput.value = settings.googleDriveClientId ?? "";
+  }
+  const secretInput = $<HTMLInputElement>("googleDriveClientSecret");
+  if (secretInput && document.activeElement !== secretInput) {
+    secretInput.value = settings.googleDriveClientSecret ?? "";
   }
   const extId = $("googleDriveExtensionId");
   const redirect = $("googleDriveRedirectUri");
@@ -2879,6 +2894,32 @@ async function persistGoogleDriveClientId(showStatus = true) {
   }
 }
 
+async function persistGoogleDriveClientSecret(showStatus = true) {
+  const input = $<HTMLInputElement>("googleDriveClientSecret");
+  const next = input.value.trim();
+  const prev = settings.googleDriveClientSecret?.trim() ?? "";
+  if (next === prev) return;
+  settings.googleDriveClientSecret = next || undefined;
+  await persistDownloadSettings();
+  if (document.activeElement !== input) {
+    input.value = settings.googleDriveClientSecret ?? "";
+  }
+  syncGoogleDriveSettingsUi();
+  if (showStatus) {
+    setStatus(
+      next
+        ? "客户端密钥已保存。请重新点「连接 Google 账号」以启用长期自动续期。"
+        : "客户端密钥已清除。"
+    );
+  }
+}
+
+let googleDriveClientSecretSaveTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleGoogleDriveClientSecretSave() {
+  clearTimeout(googleDriveClientSecretSaveTimer);
+  googleDriveClientSecretSaveTimer = setTimeout(() => void persistGoogleDriveClientSecret(), 500);
+}
+
 let googleDriveClientIdSaveTimer: ReturnType<typeof setTimeout> | undefined;
 function scheduleGoogleDriveClientIdSave() {
   clearTimeout(googleDriveClientIdSaveTimer);
@@ -2894,6 +2935,11 @@ $("googleDriveClientId").oninput = () => scheduleGoogleDriveClientIdSave();
 $("googleDriveClientId").onchange = () => {
   clearTimeout(googleDriveClientIdSaveTimer);
   void persistGoogleDriveClientId();
+};
+$("googleDriveClientSecret").oninput = () => scheduleGoogleDriveClientSecretSave();
+$("googleDriveClientSecret").onchange = () => {
+  clearTimeout(googleDriveClientSecretSaveTimer);
+  void persistGoogleDriveClientSecret();
 };
 $("googleDriveUploadMode").onchange = async () => {
   settings.googleDriveUploadMode = $<HTMLSelectElement>("googleDriveUploadMode").value as
@@ -3047,6 +3093,7 @@ $("googleDriveDisconnect").onclick = async () => {
     await ask(MessageType.GoogleDriveDisconnect);
     settings.googleDriveAccountEmail = undefined;
     googleDriveAuthExpiresAt = null;
+    googleDriveAuthHasRefreshToken = false;
     settings.googleDriveEnabled = false;
     await persistDownloadSettings();
     syncGoogleDriveSettingsUi();
@@ -3438,7 +3485,11 @@ void (async () => {
 })();
 setInterval(() => void refresh(), 2000);
 setInterval(() => {
-  if (settings.googleDriveEnabled && isGoogleDriveLinked(settings) && googleDriveAuthExpiresAt) {
+  if (
+    settings.googleDriveEnabled &&
+    isGoogleDriveLinked(settings) &&
+    (googleDriveAuthExpiresAt || googleDriveAuthHasRefreshToken)
+  ) {
     renderGoogleDriveAuthExpiryHint();
   }
 }, 60_000);
