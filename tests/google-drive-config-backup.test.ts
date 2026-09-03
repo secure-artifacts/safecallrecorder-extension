@@ -108,6 +108,54 @@ describe("google drive config backup", () => {
     expect(doc.googleDrive.clientSecret).toBe("GOCSPX-from-input");
   });
 
+  it("applies account email when auth session is included", () => {
+    const authSession = {
+      accessToken: "ya29.test",
+      expiresAt: Date.now() + 3_600_000,
+      clientId: "123.apps.googleusercontent.com",
+      refreshToken: "refresh-abc"
+    };
+    const config = buildGoogleDriveConfigExport(
+      {
+        ...DEFAULT_SETTINGS,
+        googleDriveEnabled: true,
+        googleDriveFolderId: "abc",
+        googleDriveAccountEmail: "user@example.com",
+        googleDriveClientId: "123.apps.googleusercontent.com",
+        googleDriveClientSecret: "GOCSPX-secret"
+      },
+      authSession
+    );
+    const applied = applyGoogleDriveConfig(DEFAULT_SETTINGS, config);
+    expect(applied.googleDriveAccountEmail).toBe("user@example.com");
+    expect(applied.googleDriveClientSecret).toBe("GOCSPX-secret");
+  });
+
+  it("normalizes auth session client id to match googleDrive.clientId", () => {
+    const doc = {
+      kind: "SafeCallRecorderGoogleDriveConfig",
+      version: 1,
+      exportedAt: Date.now(),
+      googleDrive: {
+        enabled: true,
+        uploadMode: "local_and_cloud",
+        autoUploadOnStop: true,
+        folderId: "abc",
+        clientId: "123.apps.googleusercontent.com",
+        clientSecret: "GOCSPX-secret",
+        accountEmail: "user@example.com"
+      },
+      authSession: {
+        accessToken: "ya29.test",
+        expiresAt: Date.now() + 3_600_000,
+        clientId: "old-client-id.apps.googleusercontent.com",
+        refreshToken: "refresh-abc"
+      }
+    };
+    const parsed = parseGoogleDriveConfig(JSON.stringify(doc));
+    expect(parsed.authSession?.clientId).toBe("123.apps.googleusercontent.com");
+  });
+
   it("builds export document", () => {
     const doc = buildGoogleDriveConfigExport({
       ...DEFAULT_SETTINGS,

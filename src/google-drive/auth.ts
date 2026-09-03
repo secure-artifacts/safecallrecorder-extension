@@ -459,10 +459,19 @@ export async function restoreAuthSessionFromExport(
   session: GoogleDriveAuthSessionExport
 ): Promise<{ ok: boolean; email?: string }> {
   const settings = await getSettings();
-  const clientId = await resolveGoogleClientId(settings);
-  if (!clientId || session.clientId !== clientId) return { ok: false };
+  const sessionClientId = session.clientId?.trim();
+  if (!sessionClientId) return { ok: false };
+  let clientId = (await resolveGoogleClientId(settings))?.trim();
+  if (!clientId) {
+    clientId = sessionClientId;
+    await setSettings({ googleDriveClientId: sessionClientId });
+  } else if (clientId !== sessionClientId) {
+    const storedId = settings.googleDriveClientId?.trim();
+    if (storedId !== sessionClientId) return { ok: false };
+    clientId = sessionClientId;
+  }
 
-  const clientSecret = await resolveGoogleClientSecretAsync(settings);
+  const clientSecret = await resolveGoogleClientSecretAsync(await getSettings());
   const refreshToken = session.refreshToken?.trim();
 
   if (refreshToken && clientSecret) {

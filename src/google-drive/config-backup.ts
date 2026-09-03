@@ -116,6 +116,9 @@ export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
     };
     if (isUsableAuthSessionExport(candidate)) {
       authSession = candidate;
+      if (clientId && authSession.clientId !== clientId) {
+        authSession = { ...authSession, clientId };
+      }
     }
   }
   return {
@@ -149,6 +152,10 @@ export function applyGoogleDriveConfig(
   config: GoogleDriveConfigExport
 ): AppSettings {
   const g = config.googleDrive;
+  const linkedEmail =
+    config.authSession && isUsableAuthSessionExport(config.authSession)
+      ? g.accountEmail?.trim()
+      : undefined;
   let next: AppSettings = {
     ...settings,
     googleDriveEnabled: g.enabled,
@@ -158,7 +165,7 @@ export function applyGoogleDriveConfig(
     googleDriveFolderName: g.folderName,
     googleDriveClientId: g.clientId,
     googleDriveClientSecret: g.clientSecret,
-    googleDriveAccountEmail: undefined
+    googleDriveAccountEmail: linkedEmail || undefined
   };
   const stopMode =
     config.stopDownloadMode ?? (g.uploadMode === "cloud_only" ? "cloud_only" : undefined);

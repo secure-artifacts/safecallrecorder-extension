@@ -100,7 +100,7 @@ import {
   isGoogleDriveConfigured,
   friendlyGoogleConnectError
 } from "./google-drive/config";
-import { connectGoogleAccount } from "./google-drive/auth";
+import { connectGoogleAccount, getAuthSessionForExport } from "./google-drive/auth";
 import { ensureDefaultDriveFolder } from "./google-drive/drive-api";
 import {
   applyGoogleDriveConfig,
@@ -3103,15 +3103,27 @@ $("googleDriveExportConfig").onclick = () => {
         setStatus("导出失败：请填写 OAuth 客户端 ID。");
         return;
       }
-      const authData = (await ask(MessageType.GoogleDriveGetAuthSessionExport)) as {
-        authSession?: {
-          accessToken: string;
-          expiresAt: number;
-          clientId: string;
-          refreshToken?: string;
-        };
-      };
-      const json = serializeGoogleDriveConfig(settings, authData.authSession, exportCredentials);
+      let authSession =
+        (
+          (await ask(MessageType.GoogleDriveGetAuthSessionExport)) as {
+            authSession?: {
+              accessToken: string;
+              expiresAt: number;
+              clientId: string;
+              refreshToken?: string;
+            };
+          }
+        ).authSession ?? (await getAuthSessionForExport());
+      if (authSession && exportCredentials.clientId) {
+        authSession = { ...authSession, clientId: exportCredentials.clientId };
+      }
+      if (isGoogleDriveLinked(settings) && !isUsableAuthSessionExport(authSession)) {
+        setStatus(
+          "导出失败：当前 Google 登录无法备份。请填写客户端密钥后重新点「连接 Google 账号」完成长期授权，再导出。"
+        );
+        return;
+      }
+      const json = serializeGoogleDriveConfig(settings, authSession, exportCredentials);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -3122,7 +3134,7 @@ $("googleDriveExportConfig").onclick = () => {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
-      const detail = describeGoogleDriveConfigExport(authData.authSession);
+      const detail = describeGoogleDriveConfigExport(authSession);
       setStatus(
         `Google 云端配置已导出（${detail}）此文件含 ID、密钥与登录信息，请勿分享或上传到公开位置。`
       );
@@ -3141,12 +3153,14 @@ $("googleDriveImportConfigFile").onchange = async () => {
     const text = await file.text();
     const config = parseGoogleDriveConfig(text);
     settings = applyGoogleDriveConfig(settings, config);
-    flushGoogleDriveCredentialsFromUi();
+    syncGoogleDriveSettingsUi();
     await syncGoogleDriveSettingsToStorage();
     syncDownloadSettingsUi();
-    syncGoogleDriveSettingsUi();
 
     const authRestored = await tryRestoreGoogleAuthFromConfig(config);
+    if (!authRestored) {
+      await refreshGoogleDriveConnectionStatus();
+    }
 
     if (authRestored && canUploadToGoogleDrive(settings)) {
       setStatus(
