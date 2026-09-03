@@ -3663,7 +3663,7 @@ $("clearHistory").onclick = async () => {
     }
     await runClear(true);
   } catch (e) {
-    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+    setStatus(friendlyError(e instanceof Error ? e.message : String(e)), { scroll: false });
   }
 };
 $("clearAll").onclick = () => void $("clearHistory").click();
