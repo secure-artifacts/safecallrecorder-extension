@@ -48,6 +48,29 @@ describe("google drive config backup", () => {
     ).toThrow(/缺少 Google Drive 文件夹 ID/);
   });
 
+  it("exports auth session when provided and still valid", () => {
+    const authSession = {
+      accessToken: "ya29.test",
+      expiresAt: Date.now() + 3_600_000,
+      clientId: "123.apps.googleusercontent.com"
+    };
+    const doc = buildGoogleDriveConfigExport(
+      { ...DEFAULT_SETTINGS, googleDriveEnabled: true, googleDriveFolderId: "abc" },
+      authSession
+    );
+    expect(doc.authSession?.accessToken).toBe("ya29.test");
+    const roundTrip = parseGoogleDriveConfig(JSON.stringify(doc));
+    expect(roundTrip.authSession?.clientId).toBe("123.apps.googleusercontent.com");
+  });
+
+  it("omits expired auth session from export document", () => {
+    const doc = buildGoogleDriveConfigExport(
+      { ...DEFAULT_SETTINGS, googleDriveEnabled: true, googleDriveFolderId: "abc" },
+      { accessToken: "x", expiresAt: Date.now() - 1000, clientId: "123.apps.googleusercontent.com" }
+    );
+    expect(doc.authSession).toBeUndefined();
+  });
+
   it("builds export document", () => {
     const doc = buildGoogleDriveConfigExport({
       ...DEFAULT_SETTINGS,

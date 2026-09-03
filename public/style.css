@@ -781,6 +781,10 @@ input[type="text"]:focus, select:focus {
   color: var(--text);
   word-break: break-all;
 }
+.google-drive-auth-expiry {
+  margin: -4px 0 10px;
+  font-size: 12px;
+}
 .google-drive-client-row {
   display: grid;
   grid-template-columns: auto 1fr;

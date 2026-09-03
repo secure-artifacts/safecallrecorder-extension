@@ -415,6 +415,7 @@
           <button type="button" id="googleDriveDisconnect" class="btn outline small hidden">断开连接</button>
         </div>
         <p id="googleDriveAccountLabel" class="google-drive-label">未连接 Google 账号</p>
+        <p id="googleDriveAuthExpiryHint" class="hint google-drive-auth-expiry hidden"></p>
         <div class="google-drive-folder-row">
           <button type="button" id="googleDrivePickFolder" class="btn outline small">选择 Drive 文件夹</button>
           <button type="button" id="googleDriveUseDefaultFolder" class="btn outline small">使用默认文件夹</button>
@@ -432,8 +433,8 @@
           <button type="button" id="googleDriveImportConfig" class="btn outline small">导入云端配置</button>
           <input type="file" id="googleDriveImportConfigFile" accept=".json,application/json" hidden>
         </div>
-        <p class="hint">换浏览器时：先在本机导出配置，在新浏览器导入后点「连接 Google 账号」，即可沿用同一 Drive 文件夹，无需重新选择。</p>
-        <p class="hint">客户端 ID 会一并导出/import；换浏览器后通常只需重新连接 Google 账号。</p>
+        <p class="hint">换浏览器时：先在本机导出配置，在新浏览器导入。若导出时已连接 Google，配置文件会含<strong>约 1 小时有效</strong>的登录状态，导入后可直接上传；过期后需再点「连接 Google 账号」。</p>
+        <p class="hint">配置文件含敏感登录信息，请勿分享或上传到公开位置。客户端 ID 会一并导出。</p>
         <p class="hint">启用后，MP3 生成完成会自动上传到你选择的 Google Drive 文件夹。历史记录里也可手动点「上传云端」。</p>
       </div>
     </section>

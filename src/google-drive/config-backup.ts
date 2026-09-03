@@ -4,6 +4,12 @@ import { applyStopDownloadModeToSettings } from "../stop-download-mode";
 export const GOOGLE_DRIVE_CONFIG_VERSION = 1;
 export const GOOGLE_DRIVE_CONFIG_FILENAME = "safecallrecorder-google-drive-config.json";
 
+export type GoogleDriveAuthSessionExport = {
+  accessToken: string;
+  expiresAt: number;
+  clientId: string;
+};
+
 export type GoogleDriveConfigExport = {
   kind: "SafeCallRecorderGoogleDriveConfig";
   version: typeof GOOGLE_DRIVE_CONFIG_VERSION;
@@ -17,11 +23,21 @@ export type GoogleDriveConfigExport = {
     accountEmail?: string;
     clientId?: string;
   };
+  /** Optional — valid ~1h; allows import without OAuth popup on another browser profile. */
+  authSession?: GoogleDriveAuthSessionExport;
   /** Optional — restores stop behavior when moving browsers. */
   stopDownloadMode?: StopDownloadMode;
 };
 
-export function buildGoogleDriveConfigExport(settings: AppSettings): GoogleDriveConfigExport {
+export function isUsableAuthSessionExport(session?: GoogleDriveAuthSessionExport | null): boolean {
+  if (!session?.accessToken?.trim() || !session.clientId?.trim()) return false;
+  return session.expiresAt > Date.now() + 30_000;
+}
+
+export function buildGoogleDriveConfigExport(
+  settings: AppSettings,
+  authSession?: GoogleDriveAuthSessionExport | null
+): GoogleDriveConfigExport {
   return {
     kind: "SafeCallRecorderGoogleDriveConfig",
     version: GOOGLE_DRIVE_CONFIG_VERSION,
@@ -35,12 +51,16 @@ export function buildGoogleDriveConfigExport(settings: AppSettings): GoogleDrive
       accountEmail: settings.googleDriveAccountEmail,
       clientId: settings.googleDriveClientId
     },
+    authSession: isUsableAuthSessionExport(authSession) ? authSession! : undefined,
     stopDownloadMode: settings.stopDownloadMode
   };
 }
 
-export function serializeGoogleDriveConfig(settings: AppSettings): string {
-  return JSON.stringify(buildGoogleDriveConfigExport(settings), null, 2);
+export function serializeGoogleDriveConfig(
+  settings: AppSettings,
+  authSession?: GoogleDriveAuthSessionExport | null
+): string {
+  return JSON.stringify(buildGoogleDriveConfigExport(settings, authSession), null, 2);
 }
 
 export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
@@ -67,6 +87,16 @@ export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
   if (g.enabled && !folderId) {
     throw new Error("配置文件已启用上传，但缺少 Google Drive 文件夹 ID。");
   }
+  const authRaw = (doc as { authSession?: Partial<GoogleDriveAuthSessionExport> }).authSession;
+  let authSession: GoogleDriveAuthSessionExport | undefined;
+  if (authRaw && typeof authRaw === "object") {
+    const accessToken = typeof authRaw.accessToken === "string" ? authRaw.accessToken.trim() : "";
+    const clientIdAuth = typeof authRaw.clientId === "string" ? authRaw.clientId.trim() : "";
+    const expiresAt = typeof authRaw.expiresAt === "number" ? authRaw.expiresAt : 0;
+    if (accessToken && clientIdAuth && expiresAt > 0) {
+      authSession = { accessToken, expiresAt, clientId: clientIdAuth };
+    }
+  }
   return {
     kind: "SafeCallRecorderGoogleDriveConfig",
     version: GOOGLE_DRIVE_CONFIG_VERSION,
@@ -80,6 +110,7 @@ export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
       accountEmail: typeof g.accountEmail === "string" ? g.accountEmail : undefined,
       clientId: clientId || undefined
     },
+    authSession,
     stopDownloadMode:
       doc.stopDownloadMode === "original_only" ||
       doc.stopDownloadMode === "mp3_only" ||
@@ -90,7 +121,7 @@ export function parseGoogleDriveConfig(raw: string): GoogleDriveConfigExport {
   };
 }
 
-/** Apply imported config to settings. Clears live OAuth session; user reconnects in new browser. */
+/** Apply imported config to settings. OAuth session is restored separately via authSession. */
 export function applyGoogleDriveConfig(
   settings: AppSettings,
   config: GoogleDriveConfigExport

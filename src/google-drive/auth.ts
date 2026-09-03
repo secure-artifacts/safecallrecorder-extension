@@ -1,5 +1,6 @@
 import { getSettings, setSettings, storageGet, storageRemove, storageSet } from "../extension-storage";
 import { MessageType, requestId, type Request, type Response } from "../messages";
+import type { GoogleDriveAuthSessionExport } from "./config-backup";
 import {
   DRIVE_SCOPES,
   getGoogleRedirectUri,
@@ -219,4 +220,54 @@ export function getExtensionAuthInfo() {
     redirectUri: getGoogleRedirectUri(),
     manifestClientConfigured: Boolean(getManifestOAuthClientId())
   };
+}
+
+/** Unix ms when cached Web OAuth token expires, or null if none / wrong client. */
+export async function getGoogleAuthSessionExpiry(): Promise<number | null> {
+  const settings = await getSettings();
+  const clientId = await resolveGoogleClientId(settings);
+  if (!clientId) return null;
+  const cached = await readTokenCache();
+  if (!cached || cached.clientId !== clientId) return null;
+  return cached.expiresAt;
+}
+
+/** Include in exported config when Web OAuth token cache is still valid (~1 hour). */
+export async function getAuthSessionForExport(): Promise<GoogleDriveAuthSessionExport | null> {
+  const settings = await getSettings();
+  const clientId = await resolveGoogleClientId(settings);
+  if (!clientId) return null;
+  const cached = await readTokenCache();
+  if (!cached?.accessToken || cached.clientId !== clientId) return null;
+  if (cached.expiresAt <= Date.now() + 30_000) return null;
+  return {
+    accessToken: cached.accessToken,
+    expiresAt: cached.expiresAt,
+    clientId: cached.clientId
+  };
+}
+
+export async function restoreAuthSessionFromExport(
+  session: GoogleDriveAuthSessionExport
+): Promise<{ ok: boolean; email?: string }> {
+  if (!session.accessToken?.trim() || session.expiresAt <= Date.now() + 30_000) {
+    return { ok: false };
+  }
+  const settings = await getSettings();
+  const clientId = await resolveGoogleClientId(settings);
+  if (!clientId || session.clientId !== clientId) return { ok: false };
+
+  await writeTokenCache({
+    accessToken: session.accessToken,
+    expiresAt: session.expiresAt,
+    clientId: session.clientId
+  });
+
+  const email = (await fetchGoogleAccountEmail(session.accessToken))?.trim();
+  if (!email) {
+    await clearGoogleTokenCache();
+    return { ok: false };
+  }
+  await setSettings({ googleDriveAccountEmail: email });
+  return { ok: true, email };
 }

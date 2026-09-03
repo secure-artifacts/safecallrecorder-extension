@@ -92,7 +92,7 @@ import { driveUploadLabel } from "./google-drive/upload-service";
 import { driveLinkLabel, resolveSessionDriveWebUrl } from "./google-drive/drive-links";
 import { copyTextToClipboard } from "./google-drive/clipboard";
 import { onDriveUploadEvent, type DriveUploadEvent } from "./google-drive/upload-events";
-import { googleDriveAccountLabel, isGoogleDriveLinked, resolveStopDownloadMode } from "./google-drive/settings";
+import { googleDriveAccountLabel, isGoogleDriveLinked, resolveStopDownloadMode, canUploadToGoogleDrive } from "./google-drive/settings";
 import {
   getGoogleRedirectUri,
   googleDriveSetupHint,
@@ -102,9 +102,14 @@ import {
 import {
   applyGoogleDriveConfig,
   googleDriveConfigFileName,
+  isUsableAuthSessionExport,
   parseGoogleDriveConfig,
   serializeGoogleDriveConfig
 } from "./google-drive/config-backup";
+import {
+  formatGoogleAuthExpiryHint,
+  isGoogleAuthExpiryWarning
+} from "./google-drive/auth-expiry";
 import {
   attachPlaybackRecovery,
   isPrematureMediaEnd,
@@ -129,6 +134,7 @@ let selectedSession: string | undefined;
 let recording = false;
 let busy = false;
 let settings: AppSettings = { ...DEFAULT_SETTINGS };
+let googleDriveAuthExpiresAt: number | null = null;
 let preview: { stream: MediaStream; monitor: StreamLevelMonitor } | undefined;
 let elapsedTimer: ReturnType<typeof setInterval> | undefined;
 let startedAt = 0;
@@ -2390,14 +2396,38 @@ function applyGoogleDriveEmail(email?: string) {
 }
 
 async function refreshGoogleDriveConnectionStatus() {
-  if (!settings.googleDriveEnabled) return;
+  if (!settings.googleDriveEnabled) {
+    googleDriveAuthExpiresAt = null;
+    syncGoogleDriveSettingsUi();
+    return;
+  }
   try {
-    const data = (await ask(MessageType.GoogleDriveGetStatus)) as { email?: string };
+    const data = (await ask(MessageType.GoogleDriveGetStatus)) as {
+      email?: string;
+      authExpiresAt?: number | null;
+    };
     applyGoogleDriveEmail(data.email);
+    googleDriveAuthExpiresAt = data.authExpiresAt ?? null;
   } catch {
     /* keep local settings */
   }
   syncGoogleDriveSettingsUi();
+}
+
+function renderGoogleDriveAuthExpiryHint() {
+  const el = $("googleDriveAuthExpiryHint");
+  if (!el) return;
+  const linked = isGoogleDriveLinked(settings);
+  const hint = linked ? formatGoogleAuthExpiryHint(googleDriveAuthExpiresAt) : null;
+  if (!hint) {
+    el.textContent = "";
+    el.classList.add("hidden");
+    el.classList.remove("warning");
+    return;
+  }
+  el.textContent = hint;
+  el.classList.remove("hidden");
+  el.classList.toggle("warning", isGoogleAuthExpiryWarning(googleDriveAuthExpiresAt));
 }
 
 function syncGoogleDriveSettingsUi() {
@@ -2439,6 +2469,7 @@ function syncGoogleDriveSettingsUi() {
   const linked = isGoogleDriveLinked(settings);
   $<HTMLButtonElement>("googleDriveConnect")?.classList.toggle("hidden", linked);
   $<HTMLButtonElement>("googleDriveDisconnect")?.classList.toggle("hidden", !linked);
+  renderGoogleDriveAuthExpiryHint();
   const privacy = $("privacyNote");
   if (privacy) {
     privacy.textContent = settings.googleDriveEnabled
@@ -2875,26 +2906,35 @@ $("googleDriveAutoUploadOnStop").onchange = async () => {
   await persistDownloadSettings();
 };
 $("googleDriveExportConfig").onclick = () => {
-  try {
-    if (!settings.googleDriveFolderId?.trim()) {
-      setStatus("请先选择 Google Drive 文件夹后再导出配置。");
-      return;
+  void (async () => {
+    try {
+      if (!settings.googleDriveFolderId?.trim()) {
+        setStatus("请先选择 Google Drive 文件夹后再导出配置。");
+        return;
+      }
+      const authData = (await ask(MessageType.GoogleDriveGetAuthSessionExport)) as {
+        authSession?: { accessToken: string; expiresAt: number; clientId: string };
+      };
+      const json = serializeGoogleDriveConfig(settings, authData.authSession);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = googleDriveConfigFileName();
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      setStatus(
+        authData.authSession
+          ? "Google 云端配置已导出（含登录状态，请尽快导入；约 1 小时内有效）。请妥善保管此文件。"
+          : "Google 云端配置已导出（未含登录状态，导入后需点「连接 Google 账号」）。"
+      );
+    } catch (e) {
+      setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
     }
-    const json = serializeGoogleDriveConfig(settings);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = googleDriveConfigFileName();
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
-    setStatus("Google 云端配置已导出。");
-  } catch (e) {
-    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
-  }
+  })();
 };
 $("googleDriveImportConfig").onclick = () => $<HTMLInputElement>("googleDriveImportConfigFile").click();
 $("googleDriveImportConfigFile").onchange = async () => {
@@ -2908,6 +2948,47 @@ $("googleDriveImportConfigFile").onchange = async () => {
     settings = applyGoogleDriveConfig(settings, config);
     await persistDownloadSettings();
     syncDownloadSettingsUi();
+
+    let authRestored = false;
+    if (config.authSession && isUsableAuthSessionExport(config.authSession)) {
+      try {
+        const restored = (await ask(
+          MessageType.GoogleDriveRestoreAuthSession,
+          { authSession: config.authSession },
+          2
+        )) as { ok?: boolean; email?: string };
+        if (restored?.ok) {
+          authRestored = true;
+          if (restored.email) settings.googleDriveAccountEmail = restored.email;
+          else if (config.googleDrive.accountEmail) {
+            settings.googleDriveAccountEmail = config.googleDrive.accountEmail;
+          }
+          await persistDownloadSettings();
+          syncGoogleDriveSettingsUi();
+          await refreshGoogleDriveConnectionStatus();
+        }
+      } catch (e) {
+        console.warn("[GoogleDriveImport] auth restore failed", e);
+      }
+    }
+
+    if (authRestored && canUploadToGoogleDrive(settings)) {
+      setStatus(
+        `配置已导入，云端上传已就绪（${settings.googleDriveAccountEmail || "已恢复登录"}）。`
+      );
+      return;
+    }
+
+    if (config.authSession && !authRestored) {
+      setStatus("配置已导入，但登录状态已过期，请点「连接 Google 账号」。");
+      if (settings.stopDownloadMode === "cloud_only") {
+        settings = applyStopDownloadModeToSettings(settings, "original_then_mp3");
+        await persistDownloadSettings();
+        syncDownloadSettingsUi();
+      }
+      return;
+    }
+
     if (settings.googleDriveEnabled && isGoogleDriveConfigured(settings)) {
       setStatus("配置已导入，正在打开 Google 授权…");
       try {
@@ -2954,6 +3035,7 @@ $("googleDriveConnect").onclick = async () => {
     settings.googleDriveEnabled = true;
     await persistDownloadSettings();
     syncGoogleDriveSettingsUi();
+    await refreshGoogleDriveConnectionStatus();
     setStatus(data.email ? `已连接 Google 账号：${data.email}` : "已连接 Google 账号");
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
@@ -2964,6 +3046,7 @@ $("googleDriveDisconnect").onclick = async () => {
   try {
     await ask(MessageType.GoogleDriveDisconnect);
     settings.googleDriveAccountEmail = undefined;
+    googleDriveAuthExpiresAt = null;
     settings.googleDriveEnabled = false;
     await persistDownloadSettings();
     syncGoogleDriveSettingsUi();
@@ -3354,3 +3437,8 @@ void (async () => {
   }
 })();
 setInterval(() => void refresh(), 2000);
+setInterval(() => {
+  if (settings.googleDriveEnabled && isGoogleDriveLinked(settings) && googleDriveAuthExpiresAt) {
+    renderGoogleDriveAuthExpiryHint();
+  }
+}, 60_000);

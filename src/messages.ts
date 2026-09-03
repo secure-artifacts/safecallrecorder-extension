@@ -28,6 +28,8 @@ export const MessageType = {
   GoogleDriveEnsureDefaultFolder: "GOOGLE_DRIVE_ENSURE_DEFAULT_FOLDER",
   GoogleDriveUploadMp3: "GOOGLE_DRIVE_UPLOAD_MP3",
   GoogleDriveGetAuthToken: "GOOGLE_DRIVE_GET_AUTH_TOKEN",
+  GoogleDriveGetAuthSessionExport: "GOOGLE_DRIVE_GET_AUTH_SESSION_EXPORT",
+  GoogleDriveRestoreAuthSession: "GOOGLE_DRIVE_RESTORE_AUTH_SESSION",
   GoogleDriveRevokeAuth: "GOOGLE_DRIVE_REVOKE_AUTH",
   SaveDownloadBlob: "SAVE_DOWNLOAD_BLOB",
   SaveDownloadUrl: "SAVE_DOWNLOAD_URL",

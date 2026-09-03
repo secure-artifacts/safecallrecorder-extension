@@ -1,8 +1,11 @@
 import {
   connectGoogleAccount,
   ensureGoogleAccountEmailSaved,
+  getAuthSessionForExport,
   getExtensionAuthInfo,
+  getGoogleAuthSessionExpiry,
   getGoogleAuthTokenInBackground,
+  restoreAuthSessionFromExport,
   revokeGoogleAuthToken
 } from "./auth";
 import { isGoogleDriveConfigured } from "./config";
@@ -31,6 +34,7 @@ export async function handleGoogleDriveMessage(
   if (type === "GOOGLE_DRIVE_GET_STATUS") {
     await ensureGoogleAccountEmailSaved().catch(() => undefined);
     const settings = await loadSettings();
+    const authExpiresAt = await getGoogleAuthSessionExpiry();
     return {
       configured: isGoogleDriveConfigured(settings),
       enabled: settings.googleDriveEnabled === true,
@@ -41,6 +45,7 @@ export async function handleGoogleDriveMessage(
       folderName: settings.googleDriveFolderName,
       uploadMode: settings.googleDriveUploadMode || "local_and_cloud",
       autoUploadOnStop: settings.googleDriveAutoUploadOnStop !== false,
+      authExpiresAt,
       ...getExtensionAuthInfo()
     };
   }
@@ -114,6 +119,22 @@ export async function handleGoogleDriveMessage(
     const interactive = payload.interactive !== false;
     const token = await getGoogleAuthTokenInBackground(interactive);
     return { token };
+  }
+
+  if (type === "GOOGLE_DRIVE_GET_AUTH_SESSION_EXPORT") {
+    const authSession = await getAuthSessionForExport();
+    return { authSession };
+  }
+
+  if (type === "GOOGLE_DRIVE_RESTORE_AUTH_SESSION") {
+    const raw = payload.authSession as Record<string, unknown> | undefined;
+    if (!raw || typeof raw !== "object") throw new Error("缺少 authSession");
+    const session = {
+      accessToken: String(raw.accessToken || ""),
+      expiresAt: Number(raw.expiresAt || 0),
+      clientId: String(raw.clientId || "")
+    };
+    return restoreAuthSessionFromExport(session);
   }
 
   if (type === "GOOGLE_DRIVE_UPLOAD_MP3") {
