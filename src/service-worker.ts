@@ -209,11 +209,15 @@ chrome.runtime.onMessage.addListener((msg: Request, _sender, reply) => {
 
     if (msg.type === MessageType.SaveSettings) {
       const cur = await storageGetDirect("settings");
+      const patch = msg.payload as unknown as Partial<AppSettings>;
       const next = {
         ...DEFAULT_SETTINGS,
         ...(cur.settings as AppSettings | undefined),
-        ...(msg.payload as unknown as Partial<AppSettings>)
-      };
+        ...patch
+      } as AppSettings;
+      for (const key of Object.keys(patch) as (keyof AppSettings)[]) {
+        if (patch[key] === undefined) delete next[key];
+      }
       await storageSetDirect({ settings: next });
       return reply({ ok: true, requestId: msg.requestId, data: next });
     }

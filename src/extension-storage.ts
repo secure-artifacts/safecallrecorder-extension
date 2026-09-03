@@ -203,9 +203,12 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function setSettings(partial: Partial<AppSettings>): Promise<AppSettings> {
   const cur = await getSettings();
-  const next = { ...cur, ...partial };
+  const next = { ...cur, ...partial } as AppSettings;
+  for (const key of Object.keys(partial) as (keyof AppSettings)[]) {
+    if (partial[key] === undefined) delete next[key];
+  }
   await storageSet({ settings: next });
-  return next;
+  return applyRecordingNameProfilesToSettings(next);
 }
 
 /** Non-critical live session mirror — never throws into MediaRecorder path. */

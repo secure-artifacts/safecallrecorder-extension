@@ -1252,13 +1252,19 @@ function setStatus(text: string) {
   el.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
-function flushGoogleDriveCredentialsFromUi() {
-  const clientInput = $<HTMLInputElement>("googleDriveClientId");
+function mergeSettingsFromPoll(incoming: AppSettings) {
+  flushGoogleDriveCredentialsFromUi();
+  const idInput = $<HTMLInputElement>("googleDriveClientId");
   const secretInput = $<HTMLInputElement>("googleDriveClientSecret");
-  const clientId = clientInput?.value.trim() ?? "";
-  const clientSecret = secretInput?.value.trim() ?? "";
-  settings.googleDriveClientId = clientId || undefined;
-  settings.googleDriveClientSecret = clientSecret || undefined;
+  const uiClientId = idInput?.value ?? "";
+  const uiClientSecret = secretInput?.value ?? "";
+  settings = { ...DEFAULT_SETTINGS, ...incoming };
+  if (uiClientId !== (incoming.googleDriveClientId ?? "")) {
+    settings.googleDriveClientId = uiClientId.trim() || undefined;
+  }
+  if (uiClientSecret !== (incoming.googleDriveClientSecret ?? "")) {
+    settings.googleDriveClientSecret = uiClientSecret.trim() || undefined;
+  }
 }
 
 async function syncGoogleDriveSettingsToStorage(): Promise<void> {
@@ -1274,6 +1280,15 @@ async function syncGoogleDriveSettingsToStorage(): Promise<void> {
     googleDriveAccountEmail: settings.googleDriveAccountEmail
   });
   Object.assign(settings, merged);
+}
+
+function flushGoogleDriveCredentialsFromUi() {
+  const clientInput = $<HTMLInputElement>("googleDriveClientId");
+  const secretInput = $<HTMLInputElement>("googleDriveClientSecret");
+  const clientId = clientInput?.value.trim() ?? "";
+  const clientSecret = secretInput?.value.trim() ?? "";
+  settings.googleDriveClientId = clientId || undefined;
+  settings.googleDriveClientSecret = clientSecret || undefined;
 }
 
 let driveUploadCopyUrl = "";
@@ -2092,7 +2107,7 @@ async function refresh() {
       return;
     }
     if (data.settings) {
-      settings = { ...DEFAULT_SETTINGS, ...data.settings };
+      mergeSettingsFromPoll({ ...DEFAULT_SETTINGS, ...data.settings });
       if (!deferHistorySync) {
         syncDownloadSettingsUi();
         syncAutoStartSettingsUi();
@@ -2994,10 +3009,10 @@ async function persistGoogleDriveClientId(showStatus = true) {
   const next = input.value.trim();
   const prev = settings.googleDriveClientId?.trim() ?? "";
   if (next === prev) return;
-  settings.googleDriveClientId = next || undefined;
   settings.googleDriveAccountEmail = undefined;
   await ask(MessageType.GoogleDriveRevokeAuth).catch(() => undefined);
-  await persistDownloadSettings();
+  settings.googleDriveClientId = next || undefined;
+  await setSettings({ googleDriveClientId: next || undefined });
   if (document.activeElement !== input) {
     input.value = settings.googleDriveClientId ?? "";
   }
@@ -3017,7 +3032,7 @@ async function persistGoogleDriveClientSecret(showStatus = true) {
   const prev = settings.googleDriveClientSecret?.trim() ?? "";
   if (next === prev) return;
   settings.googleDriveClientSecret = next || undefined;
-  await persistDownloadSettings();
+  await setSettings({ googleDriveClientSecret: next || undefined });
   if (document.activeElement !== input) {
     input.value = settings.googleDriveClientSecret ?? "";
   }
