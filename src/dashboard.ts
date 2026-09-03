@@ -2199,6 +2199,7 @@ async function stopRecording() {
     const result = (await ask(MessageType.StopRecording, { sessionId: id })) as {
       mode?: StopDownloadMode;
       originalDownload?: { ok?: boolean; filename?: string; error?: { message?: string } } | null;
+      autoDownloadOriginal?: boolean;
       mp3Queued?: boolean;
     };
     if (elapsedTimer) clearInterval(elapsedTimer);
@@ -2209,6 +2210,16 @@ async function stopRecording() {
     $("elapsed").textContent = "00:00";
 
     const mode = result?.mode || settings.stopDownloadMode || "original_then_mp3";
+    let od = result?.originalDownload ?? null;
+    if (
+      !od &&
+      result?.autoDownloadOriginal !== false &&
+      mode !== "mp3_only" &&
+      mode !== "cloud_only" &&
+      settings.autoDownloadOriginal !== false
+    ) {
+      od = await downloadOriginalRecording(id, { trigger: "auto", allowPermissionRequest: true });
+    }
     if (mode === "mp3_only") {
       setStatus("已完成（已按设置等待整合 MP3）");
     } else if (mode === "cloud_only") {
@@ -2219,7 +2230,6 @@ async function stopRecording() {
       );
     } else {
       setStatus("录音已经安全保存，正在准备下载……");
-      const od = result?.originalDownload;
       if (od?.ok) {
         setStatus(
           result?.mp3Queued

@@ -98,9 +98,22 @@ export async function prepareOriginalExport(
   return { parts, assembled };
 }
 
+function saveOptionsForTrigger(options?: {
+  saveAs?: boolean;
+  trigger?: "auto" | "manual";
+  allowPermissionRequest?: boolean;
+}) {
+  const saveAs = options?.saveAs === true;
+  const auto = options?.trigger === "auto";
+  return {
+    saveAs,
+    requestDirectoryPermission: saveAs || !auto || options?.allowPermissionRequest === true
+  };
+}
+
 export async function downloadOriginalRecording(
   sessionId: string,
-  options?: { saveAs?: boolean; trigger?: "auto" | "manual"; displayNameOverride?: string }
+  options?: { saveAs?: boolean; trigger?: "auto" | "manual"; displayNameOverride?: string; allowPermissionRequest?: boolean }
 ): Promise<OriginalDownloadResult> {
   const existing = pendingOriginal.get(sessionId);
   if (existing) return existing;
@@ -137,7 +150,7 @@ export async function downloadOriginalRecording(
         const one = usable[0]!;
         const ext = extFromMime(one.mimeType);
         const filename = buildOriginalFileName(display, ext);
-        const saved = await saveDownloadBlob(one.blob, filename, { saveAs: options?.saveAs === true });
+        const saved = await saveDownloadBlob(one.blob, filename, saveOptionsForTrigger(options));
         if (!saved.ok) throw new Error(saved.error.message);
         session.originalStatus = "available";
         session.originalFileName = filename;
@@ -182,7 +195,7 @@ export async function downloadOriginalRecording(
 
       const zipBlob = buildStoreZip(zipEntries);
       const filename = buildRecoveryZipName(display);
-      const saved = await saveDownloadBlob(zipBlob, filename, { saveAs: options?.saveAs === true });
+      const saved = await saveDownloadBlob(zipBlob, filename, saveOptionsForTrigger(options));
       if (!saved.ok) throw new Error(saved.error.message);
       session.originalStatus = "available";
       session.originalFileName = filename;

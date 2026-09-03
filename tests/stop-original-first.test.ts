@@ -37,16 +37,15 @@ describe("stop → original download → background MP3 contract", () => {
     expect(buf[1]).toBe(0x4b);
   });
 
-  it("offscreen stop does not await convertSessionToMp3 before reply in default mode", () => {
-    const src = readFileSync(new URL("../src/offscreen.ts", import.meta.url), "utf8");
-    expect(src).toContain("queueMp3GenerationInBackground");
-    expect(src).toContain("downloadOriginalRecording");
-    // Default path must queue MP3 without awaiting convert before reply
-    const stopBlock = src.slice(src.indexOf("StopRecording"), src.indexOf("ExportSession"));
+  it("offscreen stop queues MP3 without downloading original (dashboard handles auto download)", () => {
+    const offscreen = readFileSync(new URL("../src/offscreen.ts", import.meta.url), "utf8");
+    const dashboard = readFileSync(new URL("../src/dashboard.ts", import.meta.url), "utf8");
+    expect(offscreen).toContain("queueMp3GenerationInBackground");
+    expect(offscreen).toContain("autoDownloadOriginal");
+    expect(offscreen).not.toMatch(/downloadOriginalRecording\(sessionId, \{ trigger: "auto" \}\)/);
+    const stopBlock = offscreen.slice(offscreen.indexOf("StopRecording"), offscreen.indexOf("ExportSession"));
     expect(stopBlock).toContain("queueMp3GenerationInBackground");
-    expect(stopBlock).toMatch(/downloadOriginalRecording[\s\S]*queueMp3GenerationInBackground/);
-    // Must not await convertSessionToMp3 in original_then_mp3 path before reply
-    expect(stopBlock).toContain('mode === "mp3_only"');
+    expect(dashboard).toContain('downloadOriginalRecording(id, { trigger: "auto", allowPermissionRequest: true })');
   });
 
   it("recording stop finalizes as completed without processing_mp3", () => {
@@ -75,6 +74,12 @@ describe("stop → original download → background MP3 contract", () => {
     expect(src).toContain("recordingLabel");
     expect(src).toContain("mp3Label");
     expect(src).toContain("下载原始录音");
+  });
+
+  it("auto downloads never use saveAs picker", () => {
+    const src = readFileSync(new URL("../src/download-save.ts", import.meta.url), "utf8");
+    expect(src).toContain("saveAs: false");
+    expect(src).toContain("silentAuto");
   });
 
   it("dashboard settings expose stop download modes", () => {

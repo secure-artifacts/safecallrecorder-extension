@@ -29,20 +29,28 @@ function anchorDownload(url: string, filename: string) {
   a.remove();
 }
 
+export type SaveDownloadOptions = {
+  saveAs?: boolean;
+  /** When false, do not prompt for folder permission (auto downloads after stop). */
+  requestDirectoryPermission?: boolean;
+};
+
 export async function saveDownloadBlob(
   blob: Blob,
   filename: string,
-  options?: { saveAs?: boolean; requestDirectoryPermission?: boolean }
+  options?: SaveDownloadOptions
 ): Promise<SaveDownloadResult> {
   const settings = await getSettings();
   const saveAs = !!options?.saveAs;
+  const requestDirectoryPermission = options?.requestDirectoryPermission !== false;
+  const silentAuto = !saveAs && !requestDirectoryPermission;
 
   if (!saveAs) {
     const custom = await writeBlobToDownloadDirectory(
       blob,
       filename,
       settings.downloadFolder,
-      options?.requestDirectoryPermission !== false
+      requestDirectoryPermission
     );
     if (custom.ok) {
       return {
@@ -60,13 +68,28 @@ export async function saveDownloadBlob(
       const downloadId = await chrome.downloads.download({
         url,
         filename: buildDownloadPath(filename, settings.downloadFolder),
-        saveAs,
+        saveAs: false,
         conflictAction: "uniquify"
       });
       if (typeof downloadId !== "number") {
         return { ok: false, error: { code: "DOWNLOAD_NOT_STARTED", message: "浏览器没有返回有效的下载任务" } };
       }
       return { ok: true, filename, method: "chrome.downloads", downloadId };
+    }
+
+    if (saveAs && typeof document !== "undefined") {
+      anchorDownload(url, filename);
+      return { ok: true, filename, method: "anchor" };
+    }
+
+    if (silentAuto) {
+      return {
+        ok: false,
+        error: {
+          code: "SILENT_DOWNLOAD_UNAVAILABLE",
+          message: "无法静默保存到已设置的路径，请重新选择保存文件夹或在历史记录中手动下载。"
+        }
+      };
     }
 
     if (typeof document !== "undefined") {
@@ -83,16 +106,18 @@ export async function saveDownloadBlob(
 export async function saveDownloadUrl(
   url: string,
   filename: string,
-  options?: { saveAs?: boolean }
+  options?: Pick<SaveDownloadOptions, "saveAs" | "requestDirectoryPermission">
 ): Promise<SaveDownloadResult> {
   const settings = await getSettings();
   const saveAs = !!options?.saveAs;
+  const requestDirectoryPermission = options?.requestDirectoryPermission !== false;
+  const silentAuto = !saveAs && !requestDirectoryPermission;
   if (hasDownloadsApi()) {
     try {
       const downloadId = await chrome.downloads.download({
         url,
         filename: buildDownloadPath(filename, settings.downloadFolder),
-        saveAs,
+        saveAs: false,
         conflictAction: "uniquify"
       });
       if (typeof downloadId !== "number") {
@@ -105,6 +130,19 @@ export async function saveDownloadUrl(
         error: { code: "DOWNLOAD_FAILED", message: e instanceof Error ? e.message : String(e) }
       };
     }
+  }
+  if (saveAs && typeof document !== "undefined") {
+    anchorDownload(url, filename);
+    return { ok: true, filename, method: "anchor" };
+  }
+  if (silentAuto) {
+    return {
+      ok: false,
+      error: {
+        code: "SILENT_DOWNLOAD_UNAVAILABLE",
+        message: "无法静默保存到已设置的路径，请重新选择保存文件夹或在历史记录中手动下载。"
+      }
+    };
   }
   if (typeof document !== "undefined") {
     anchorDownload(url, filename);

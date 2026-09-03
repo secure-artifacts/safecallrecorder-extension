@@ -312,8 +312,9 @@ export async function downloadRecordingMp3(
       });
 
       const saveAs = !!options?.saveAs;
+      const saveOpts = { saveAs, requestDirectoryPermission: saveAs || trigger !== "auto" };
       log("download_requested", { sessionId, filename: loaded.filename, trigger, urlKind: "blob" });
-      const saved = await saveDownloadBlob(loaded.blob, loaded.filename, { saveAs });
+      const saved = await saveDownloadBlob(loaded.blob, loaded.filename, saveOpts);
       if (saved.ok) {
         log("download_started", {
           sessionId,
@@ -335,7 +336,7 @@ export async function downloadRecordingMp3(
         try {
           const dataUrl = await blobToDataUrl(loaded.blob);
           log("download_requested", { sessionId, filename: loaded.filename, trigger, urlKind: "data" });
-          const urlSaved = await saveDownloadUrl(dataUrl, loaded.filename, { saveAs });
+          const urlSaved = await saveDownloadUrl(dataUrl, loaded.filename, saveOpts);
           if (urlSaved.ok) {
             log("download_started", {
               sessionId,
