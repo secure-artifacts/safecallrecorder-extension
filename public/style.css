@@ -515,6 +515,42 @@ input[type="text"]:focus, select:focus {
 }
 .msg { margin: 0 0 10px; color: #b45309; font-size: 13px; min-height: 1.2em; }
 .status { text-align: center; font-weight: 600; margin: 8px 0; color: #0f766e; }
+.drive-upload-panel {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #99f6e4;
+  border-radius: 12px;
+  background: #f0fdf9;
+}
+.drive-upload-panel.hidden { display: none; }
+.drive-upload-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f766e;
+  text-align: center;
+}
+.drive-upload-progress {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin-top: 10px;
+  accent-color: #0d9488;
+}
+.drive-upload-done {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+}
+.drive-upload-done.hidden { display: none; }
+.drive-upload-done-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f766e;
+}
 
 .btn {
   border: 0; border-radius: 12px; padding: 14px 16px;

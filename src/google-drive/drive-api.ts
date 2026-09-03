@@ -55,7 +55,8 @@ export async function uploadDriveFile(
   blob: Blob,
   fileName: string,
   mimeType: string,
-  folderId: string
+  folderId: string,
+  onProgress?: (loaded: number, total: number) => void
 ): Promise<{ id: string; name: string; webViewLink?: string }> {
   const init = await fetch(`${DRIVE_UPLOAD}/files?uploadType=resumable&fields=id,name,webViewLink`, {
     method: "POST",
@@ -76,18 +77,38 @@ export async function uploadDriveFile(
   const uploadUrl = init.headers.get("Location");
   if (!uploadUrl) throw new Error("Google Drive 未返回上传地址");
 
-  const put = await fetch(uploadUrl, {
-    method: "PUT",
-    headers: {
-      "Content-Type": mimeType || "application/octet-stream",
-      "Content-Length": String(blob.size)
-    },
-    body: blob
-  });
-  if (!put.ok) {
-    const text = await put.text();
-    throw new Error(`上传失败：${text || put.statusText}`);
-  }
-  const file = (await put.json()) as { id: string; name: string; webViewLink?: string };
+  const file = await putBlobWithProgress(uploadUrl, blob, mimeType, onProgress);
   return file;
+}
+
+function putBlobWithProgress(
+  uploadUrl: string,
+  blob: Blob,
+  mimeType: string,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<{ id: string; name: string; webViewLink?: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", mimeType || "application/octet-stream");
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress) return;
+      const total = event.lengthComputable ? event.total : blob.size;
+      onProgress(event.loaded, total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText) as { id: string; name: string; webViewLink?: string });
+        } catch {
+          reject(new Error("上传完成但无法解析 Google Drive 响应"));
+        }
+        return;
+      }
+      reject(new Error(`上传失败：${xhr.responseText || xhr.statusText || xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error("上传失败：网络错误"));
+    xhr.onabort = () => reject(new Error("上传已取消"));
+    xhr.send(blob);
+  });
 }

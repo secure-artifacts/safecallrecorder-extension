@@ -1,7 +1,8 @@
-import { connectGoogleAccount, getExtensionAuthInfo, revokeGoogleAuthToken } from "./auth";
+import { connectGoogleAccount, ensureGoogleAccountEmailSaved, getExtensionAuthInfo, revokeGoogleAuthToken } from "./auth";
 import { isGoogleDriveConfigured } from "./config";
 import { createDriveFolder, ensureDefaultDriveFolder, listDriveFolders } from "./drive-api";
 import { uploadSessionMp3ToDrive } from "./upload-service";
+import { isGoogleDriveLinked } from "./settings";
 import { DEFAULT_SETTINGS, type AppSettings } from "../types";
 import { storageGetDirect, storageSetDirect } from "../extension-storage";
 
@@ -22,11 +23,12 @@ export async function handleGoogleDriveMessage(
   payload: Record<string, unknown> = {}
 ): Promise<unknown> {
   if (type === "GOOGLE_DRIVE_GET_STATUS") {
+    await ensureGoogleAccountEmailSaved().catch(() => undefined);
     const settings = await loadSettings();
     return {
       configured: isGoogleDriveConfigured(settings),
       enabled: settings.googleDriveEnabled === true,
-      connected: Boolean(settings.googleDriveAccountEmail),
+      connected: isGoogleDriveLinked(settings),
       email: settings.googleDriveAccountEmail,
       clientId: settings.googleDriveClientId,
       folderId: settings.googleDriveFolderId,
@@ -72,7 +74,8 @@ export async function handleGoogleDriveMessage(
   if (type === "GOOGLE_DRIVE_LIST_FOLDERS") {
     const parentId = typeof payload.parentId === "string" ? payload.parentId : undefined;
     const folders = await listDriveFolders(parentId);
-    return { folders };
+    const email = await ensureGoogleAccountEmailSaved().catch(() => undefined);
+    return { folders, email };
   }
 
   if (type === "GOOGLE_DRIVE_SET_FOLDER") {
@@ -80,7 +83,8 @@ export async function handleGoogleDriveMessage(
     const folderName = String(payload.folderName || "");
     if (!folderId) throw new Error("未选择文件夹");
     await saveSettings({ googleDriveFolderId: folderId, googleDriveFolderName: folderName });
-    return { folderId, folderName };
+    const email = await ensureGoogleAccountEmailSaved().catch(() => undefined);
+    return { folderId, folderName, email };
   }
 
   if (type === "GOOGLE_DRIVE_CREATE_FOLDER") {
@@ -89,13 +93,15 @@ export async function handleGoogleDriveMessage(
     const parentId = typeof payload.parentId === "string" ? payload.parentId : undefined;
     const folder = await createDriveFolder(name, parentId);
     await saveSettings({ googleDriveFolderId: folder.id, googleDriveFolderName: folder.name });
-    return folder;
+    const email = await ensureGoogleAccountEmailSaved().catch(() => undefined);
+    return { ...folder, email };
   }
 
   if (type === "GOOGLE_DRIVE_ENSURE_DEFAULT_FOLDER") {
     const folder = await ensureDefaultDriveFolder();
     await saveSettings({ googleDriveFolderId: folder.id, googleDriveFolderName: folder.name });
-    return folder;
+    const email = await ensureGoogleAccountEmailSaved().catch(() => undefined);
+    return { ...folder, email };
   }
 
   if (type === "GOOGLE_DRIVE_UPLOAD_MP3") {

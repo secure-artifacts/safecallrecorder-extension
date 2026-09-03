@@ -88,7 +88,15 @@ import {
 import { canContinueRecording } from "./recording-continue";
 import { driveUploadLabel } from "./google-drive/upload-service";
 import { driveLinkLabel, resolveSessionDriveWebUrl } from "./google-drive/drive-links";
-import { getGoogleRedirectUri, googleDriveSetupHint, isGoogleDriveConfigured } from "./google-drive/config";
+import { copyTextToClipboard } from "./google-drive/clipboard";
+import { onDriveUploadEvent, type DriveUploadEvent } from "./google-drive/upload-events";
+import { googleDriveAccountLabel, isGoogleDriveLinked } from "./google-drive/settings";
+import {
+  getGoogleRedirectUri,
+  googleDriveSetupHint,
+  isGoogleDriveConfigured,
+  friendlyGoogleConnectError
+} from "./google-drive/config";
 import {
   applyGoogleDriveConfig,
   googleDriveConfigFileName,
@@ -1060,6 +1068,16 @@ function updateClearHistoryButton() {
 function applyHistoryRecords(records: Session[], activeIds?: string[]) {
   historyRecords = records;
   if (activeIds) historyActiveIds = activeIds;
+  const uploading = records.find((s) => s.driveMp3Status === "uploading");
+  if (uploading && $("driveUploadPanel").classList.contains("hidden")) {
+    showDriveUploadProgress(
+      uploading.driveMp3FileName
+        ? `正在上传到 Google 云端：${uploading.driveMp3FileName}`
+        : "正在上传到 Google 云端…",
+      -1,
+      true
+    );
+  }
   renderHistory(historyRecords, historyActiveIds);
   updateClearHistoryButton();
 }
@@ -1167,6 +1185,88 @@ function friendlyError(msg: string) {
 
 function setStatus(text: string) {
   $("status").textContent = text;
+}
+
+let driveUploadCopyUrl = "";
+
+function setDriveUploadPanelVisible(visible: boolean) {
+  $("driveUploadPanel").classList.toggle("hidden", !visible);
+}
+
+function showDriveUploadProgress(label: string, percent: number, indeterminate = false) {
+  setDriveUploadPanelVisible(true);
+  $("driveUploadLabel").textContent = label;
+  $("driveUploadDone").classList.add("hidden");
+  const bar = $<HTMLProgressElement>("driveUploadProgress");
+  bar.classList.remove("hidden");
+  if (indeterminate || percent < 0) {
+    bar.removeAttribute("value");
+  } else {
+    bar.value = Math.max(0, Math.min(100, Math.round(percent)));
+  }
+}
+
+function showDriveUploadComplete(fileName: string, webUrl: string) {
+  driveUploadCopyUrl = webUrl;
+  setDriveUploadPanelVisible(true);
+  $("driveUploadLabel").textContent = "上传完成";
+  $<HTMLProgressElement>("driveUploadProgress").classList.add("hidden");
+  $("driveUploadDoneText").textContent = `已上传到 Google 云端：${fileName}`;
+  $("driveUploadDone").classList.remove("hidden");
+  setStatus(`已上传到 Google Drive：${fileName}`);
+}
+
+function hideDriveUploadPanel() {
+  setDriveUploadPanelVisible(false);
+  driveUploadCopyUrl = "";
+  $<HTMLProgressElement>("driveUploadProgress").classList.remove("hidden");
+  $("driveUploadDone").classList.add("hidden");
+}
+
+function handleDriveUploadEvent(event: DriveUploadEvent) {
+  if (event.type === "start") {
+    showDriveUploadProgress(`正在上传到 Google 云端：${event.fileName}`, 0);
+    return;
+  }
+  if (event.type === "progress") {
+    const pct = event.total > 0 ? (event.loaded / event.total) * 100 : -1;
+    showDriveUploadProgress(
+      event.total > 0
+        ? `正在上传到 Google 云端… ${Math.round(pct)}%`
+        : "正在上传到 Google 云端…",
+      pct
+    );
+    return;
+  }
+  if (event.type === "done") {
+    showDriveUploadComplete(event.fileName, event.webUrl);
+    void reloadHistoryVerified("after_drive_upload_event");
+    return;
+  }
+  if (event.type === "failed") {
+    hideDriveUploadPanel();
+    setStatus(`上传失败：${event.message}`);
+    void reloadHistoryVerified("after_drive_upload_fail");
+  }
+}
+
+async function copySessionDriveLink(session: Session) {
+  const url = resolveSessionDriveWebUrl(session);
+  if (!url) {
+    setStatus("暂无 Google 云端链接");
+    return;
+  }
+  const ok = await copyTextToClipboard(url);
+  setStatus(ok ? "云端音频链接已复制" : "复制失败，请手动复制链接");
+}
+
+async function copyDriveUploadLink() {
+  if (!driveUploadCopyUrl) {
+    setStatus("暂无 Google 云端链接");
+    return;
+  }
+  const ok = await copyTextToClipboard(driveUploadCopyUrl);
+  setStatus(ok ? "云端音频链接已复制" : "复制失败，请手动复制链接");
 }
 
 type ConfirmOptions = {
@@ -1664,10 +1764,11 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
       const driveUrl = resolveSessionDriveWebUrl(s);
       if (driveUrl) {
         add("打开云端", "outline", () => openSessionDriveLink(s));
+        add("复制链接", "outline", () => void copySessionDriveLink(s));
       }
       add("上传云端", "outline", () => {
         void (async () => {
-          setStatus("正在上传到 Google Drive…");
+          showDriveUploadProgress("正在上传到 Google Drive…", 0, true);
           try {
             const exportName = exportDisplayNameForSession(s);
             const result = (await ask(MessageType.GoogleDriveUploadMp3, {
@@ -1676,15 +1777,20 @@ function renderHistory(sessions: Session[], activeIds: string[], force = false) 
             })) as {
               ok: boolean;
               fileName?: string;
+              webUrl?: string;
               error?: { message?: string };
             };
             if (!result.ok) {
+              hideDriveUploadPanel();
               setStatus(result.error?.message || "上传失败");
-            } else {
-              setStatus(`已上传到 Google Drive：${result.fileName || ""}`);
+            } else if (result.webUrl && result.fileName) {
+              showDriveUploadComplete(result.fileName, result.webUrl);
+            } else if (result.fileName) {
+              setStatus(`已上传到 Google Drive：${result.fileName}`);
             }
             await reloadHistoryVerified("after_drive_upload");
           } catch (e) {
+            hideDriveUploadPanel();
             setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
           }
         })();
@@ -2191,15 +2297,35 @@ type DriveFolderBrowseFrame = { id?: string; name: string };
 
 let driveFolderBrowseStack: DriveFolderBrowseFrame[] = [{ name: "我的云端硬盘" }];
 
+function applyGoogleDriveEmail(email?: string) {
+  const next = email?.trim();
+  if (next) settings.googleDriveAccountEmail = next;
+}
+
+async function refreshGoogleDriveConnectionStatus() {
+  if (!settings.googleDriveEnabled) return;
+  try {
+    const data = (await ask(MessageType.GoogleDriveGetStatus)) as { email?: string };
+    applyGoogleDriveEmail(data.email);
+  } catch {
+    /* keep local settings */
+  }
+  syncGoogleDriveSettingsUi();
+}
+
 function syncGoogleDriveSettingsUi() {
   const enabled = $<HTMLInputElement>("googleDriveEnabled");
   if (enabled) enabled.checked = settings.googleDriveEnabled === true;
   const clientInput = $<HTMLInputElement>("googleDriveClientId");
-  if (clientInput) clientInput.value = settings.googleDriveClientId ?? "";
+  if (clientInput && document.activeElement !== clientInput) {
+    clientInput.value = settings.googleDriveClientId ?? "";
+  }
   const extId = $("googleDriveExtensionId");
   const redirect = $("googleDriveRedirectUri");
   if (extId) extId.textContent = chrome.runtime.id;
   if (redirect) redirect.textContent = getGoogleRedirectUri();
+  const redirectTutorial = $("googleDriveRedirectUriTutorial");
+  if (redirectTutorial) redirectTutorial.textContent = getGoogleRedirectUri();
   const mode = $<HTMLSelectElement>("googleDriveUploadMode");
   if (mode) mode.value = settings.googleDriveUploadMode || "local_and_cloud";
   const auto = $<HTMLInputElement>("googleDriveAutoUploadOnStop");
@@ -2216,19 +2342,16 @@ function syncGoogleDriveSettingsUi() {
   const panel = $("googleDrivePanel");
   if (panel) panel.classList.toggle("hidden", !driveOn);
   const account = $("googleDriveAccountLabel");
-  if (account) {
-    account.textContent = settings.googleDriveAccountEmail
-      ? `已连接：${settings.googleDriveAccountEmail}`
-      : "未连接 Google 账号";
-  }
+  if (account) account.textContent = googleDriveAccountLabel(settings);
   const folder = $("googleDriveFolderLabel");
   if (folder) {
     folder.textContent = settings.googleDriveFolderName
       ? `当前文件夹：${settings.googleDriveFolderName}`
       : "当前文件夹：未选择";
   }
-  $<HTMLButtonElement>("googleDriveConnect")?.classList.toggle("hidden", !!settings.googleDriveAccountEmail);
-  $<HTMLButtonElement>("googleDriveDisconnect")?.classList.toggle("hidden", !settings.googleDriveAccountEmail);
+  const linked = isGoogleDriveLinked(settings);
+  $<HTMLButtonElement>("googleDriveConnect")?.classList.toggle("hidden", linked);
+  $<HTMLButtonElement>("googleDriveDisconnect")?.classList.toggle("hidden", !linked);
   const privacy = $("privacyNote");
   if (privacy) {
     privacy.textContent = settings.googleDriveEnabled
@@ -2249,7 +2372,8 @@ async function refreshDriveFolderModal() {
   try {
     const data = (await ask(MessageType.GoogleDriveListFolders, {
       parentId: current.id
-    })) as { folders?: Array<{ id: string; name: string }> };
+    })) as { folders?: Array<{ id: string; name: string }>; email?: string };
+    applyGoogleDriveEmail(data.email);
     list.replaceChildren();
     for (const folder of data.folders || []) {
       const btn = document.createElement("button");
@@ -2613,18 +2737,39 @@ $("pickDownloadFolder").onclick = async () => {
     setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
   }
 };
+async function persistGoogleDriveClientId(showStatus = true) {
+  const input = $<HTMLInputElement>("googleDriveClientId");
+  const next = input.value.trim();
+  const prev = settings.googleDriveClientId?.trim() ?? "";
+  if (next === prev) return;
+  settings.googleDriveClientId = next || undefined;
+  settings.googleDriveAccountEmail = undefined;
+  await ask(MessageType.GoogleDriveRevokeAuth).catch(() => undefined);
+  await persistDownloadSettings();
+  if (document.activeElement !== input) {
+    input.value = settings.googleDriveClientId ?? "";
+  }
+  syncGoogleDriveSettingsUi();
+  if (showStatus) {
+    setStatus(next ? "客户端 ID 已保存，请点「连接 Google 账号」。" : "客户端 ID 已清除。");
+  }
+}
+
+let googleDriveClientIdSaveTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleGoogleDriveClientIdSave() {
+  clearTimeout(googleDriveClientIdSaveTimer);
+  googleDriveClientIdSaveTimer = setTimeout(() => void persistGoogleDriveClientId(), 500);
+}
+
 $("googleDriveEnabled").onchange = async () => {
   settings.googleDriveEnabled = $<HTMLInputElement>("googleDriveEnabled").checked;
   syncGoogleDriveSettingsUi();
   await persistDownloadSettings();
 };
-$("googleDriveClientId").onchange = async () => {
-  settings.googleDriveClientId = $<HTMLInputElement>("googleDriveClientId").value.trim();
-  settings.googleDriveAccountEmail = undefined;
-  await ask(MessageType.GoogleDriveRevokeAuth).catch(() => undefined);
-  await persistDownloadSettings();
-  syncGoogleDriveSettingsUi();
-  setStatus("客户端 ID 已更新，请重新连接 Google 账号。");
+$("googleDriveClientId").oninput = () => scheduleGoogleDriveClientIdSave();
+$("googleDriveClientId").onchange = () => {
+  clearTimeout(googleDriveClientIdSaveTimer);
+  void persistGoogleDriveClientId();
 };
 $("googleDriveUploadMode").onchange = async () => {
   settings.googleDriveUploadMode = $<HTMLSelectElement>("googleDriveUploadMode").value as
@@ -2715,7 +2860,8 @@ $("googleDriveConnect").onclick = async () => {
     syncGoogleDriveSettingsUi();
     setStatus(data.email ? `已连接 Google 账号：${data.email}` : "已连接 Google 账号");
   } catch (e) {
-    setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
+    const raw = e instanceof Error ? e.message : String(e);
+    setStatus(friendlyGoogleConnectError(raw));
   }
 };
 $("googleDriveDisconnect").onclick = async () => {
@@ -2733,9 +2879,10 @@ $("googleDriveDisconnect").onclick = async () => {
 $("googleDriveUseDefaultFolder").onclick = async () => {
   try {
     setStatus("正在创建/查找默认文件夹…");
-    const folder = (await ask(MessageType.GoogleDriveEnsureDefaultFolder)) as { id: string; name: string };
+    const folder = (await ask(MessageType.GoogleDriveEnsureDefaultFolder)) as { id: string; name: string; email?: string };
     settings.googleDriveFolderId = folder.id;
     settings.googleDriveFolderName = folder.name;
+    applyGoogleDriveEmail(folder.email);
     await persistDownloadSettings();
     syncGoogleDriveSettingsUi();
     setStatus(`已选择文件夹：${folder.name}`);
@@ -3089,6 +3236,8 @@ window.addEventListener("beforeunload", () => {
 ensureMeterHost($("liveMonitor"));
 fillBitrates();
 installDownloadLifecycleListeners();
+$("driveUploadCopyLink").onclick = () => void copyDriveUploadLink();
+onDriveUploadEvent(handleDriveUploadEvent);
 
 function showEnvFatal(message: string) {
   const banner = document.createElement("div");
@@ -3120,6 +3269,7 @@ void (async () => {
   syncOnboardingCard();
   syncAutoStartSettingsUi();
   syncRecordingNameProfilesUi();
+  await refreshGoogleDriveConnectionStatus();
   updateLocalMediaUi();
   if (!recording && !localMediaPlaybackActive) void ensurePreviewMonitor();
   if (new URLSearchParams(location.search).get("openSettings") === "1") {

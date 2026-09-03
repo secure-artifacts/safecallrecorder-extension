@@ -5,6 +5,7 @@ import { storage } from "../storage-manager";
 import type { Session } from "../types";
 import { buildDriveFileViewUrl } from "./drive-links";
 import { uploadDriveFile } from "./drive-api";
+import { postDriveUploadEvent } from "./upload-events";
 import { hasGoogleDriveFolder, shouldAutoUploadMp3OnStop } from "./settings";
 
 const uploadLocks = new Map<string, Promise<DriveUploadResult>>();
@@ -59,6 +60,7 @@ export async function uploadSessionMp3ToDrive(
           driveMp3Status: "failed",
           driveMp3Error: loaded.error.message
         });
+        postDriveUploadEvent({ type: "failed", sessionId, message: loaded.error.message });
         return { ok: false, error: loaded.error };
       }
 
@@ -69,7 +71,16 @@ export async function uploadSessionMp3ToDrive(
             : buildMp3FileName(options.filenameOverride)
           : loaded.filename;
 
-      const uploaded = await uploadDriveFile(loaded.blob, uploadName, loaded.mimeType, folderId);
+      postDriveUploadEvent({
+        type: "start",
+        sessionId,
+        fileName: uploadName,
+        total: loaded.blob.size
+      });
+
+      const uploaded = await uploadDriveFile(loaded.blob, uploadName, loaded.mimeType, folderId, (loaded, total) => {
+        postDriveUploadEvent({ type: "progress", sessionId, loaded, total });
+      });
       const webUrl = uploaded.webViewLink?.trim() || buildDriveFileViewUrl(uploaded.id);
       await updateSessionDriveStatus(sessionId, {
         driveMp3Status: "uploaded",
@@ -79,6 +90,12 @@ export async function uploadSessionMp3ToDrive(
         driveMp3UploadedAt: Date.now(),
         driveMp3Error: undefined
       });
+      postDriveUploadEvent({
+        type: "done",
+        sessionId,
+        fileName: uploaded.name,
+        webUrl
+      });
       console.info("[GoogleDrive]", { stage: "mp3_uploaded", sessionId, trigger, fileId: uploaded.id, webUrl });
       return { ok: true, fileId: uploaded.id, fileName: uploaded.name, webUrl };
     } catch (e) {
@@ -87,6 +104,7 @@ export async function uploadSessionMp3ToDrive(
         driveMp3Status: "failed",
         driveMp3Error: message
       });
+      postDriveUploadEvent({ type: "failed", sessionId, message });
       console.error("[GoogleDrive]", { stage: "mp3_upload_failed", sessionId, trigger, message });
       return { ok: false, error: { code: "UPLOAD_FAILED", message } };
     }

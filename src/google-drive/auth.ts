@@ -155,6 +155,24 @@ export async function connectGoogleAccount(): Promise<{ email?: string }> {
   return { email };
 }
 
+/** Persist Gmail on settings when OAuth works but email was not saved (e.g. older scopes). */
+export async function ensureGoogleAccountEmailSaved(): Promise<string | undefined> {
+  const settings = await getSettings();
+  const existing = settings.googleDriveAccountEmail?.trim();
+  if (existing) return existing;
+  try {
+    const token = await getGoogleAuthToken(false);
+    const email = (await fetchGoogleAccountEmail(token))?.trim();
+    if (!email) return undefined;
+    await storageSetDirect({
+      settings: { ...settings, googleDriveAccountEmail: email }
+    });
+    return email;
+  } catch {
+    return undefined;
+  }
+}
+
 export function getExtensionAuthInfo() {
   return {
     extensionId: chrome.runtime.id,

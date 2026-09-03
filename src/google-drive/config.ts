@@ -6,7 +6,8 @@ export const DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 
 export const DRIVE_SCOPES = [
   "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.readonly"
+  "https://www.googleapis.com/auth/drive.readonly",
+  "https://www.googleapis.com/auth/userinfo.email"
 ] as const;
 
 const PLACEHOLDER_MARKERS = ["CONFIGURE_", "YOUR_CLIENT_ID"];
@@ -46,5 +47,26 @@ export function googleDriveSetupHint(): string {
 }
 
 export function googleDriveClientIdHint(): string {
-  return "在 Google Cloud 创建 OAuth 客户端（Chrome 应用或 Web 应用）。Web 应用的重定向 URI 需填：https://<扩展ID>.chromiumapp.org/";
+  return "在 Google Cloud 创建「Web 应用」OAuth 客户端，并把控制面板显示的重定向 URI 加入授权列表。";
+}
+
+export function friendlyGoogleConnectError(message: string, redirectUri?: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("redirect_uri_mismatch") || lower.includes("redirect_uri")) {
+    const uri =
+      redirectUri ??
+      (typeof chrome !== "undefined" && chrome.runtime?.id
+        ? getGoogleRedirectUri()
+        : "https://<扩展ID>.chromiumapp.org/");
+    return (
+      `Google 授权失败：重定向 URI 不匹配。` +
+      `在控制面板填写客户端 ID 时，必须创建「Web 应用」类型（不是「Chrome 扩展程序」）。` +
+      `打开 Google Cloud → 客户端 → 编辑或新建 Web 应用 → 已授权的重定向 URI 添加：${uri} ` +
+      `（须完全一致，含 https:// 和末尾 /）。保存后把该 Web 应用的客户端 ID 粘贴到控制面板，再点「连接 Google 账号」。`
+    );
+  }
+  if (lower.includes("access_denied") || lower.includes("403")) {
+    return "Google 访问遭拒。请在 Google Cloud → 目标对象 → 测试用户 中添加你的 Gmail，并确认发布状态为「测试中」。";
+  }
+  return message;
 }
