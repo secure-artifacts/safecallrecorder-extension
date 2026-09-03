@@ -73,10 +73,30 @@ type WebAuthPrompt = "none" | "select_account" | "consent_select_account";
 
 async function launchWebAuthFlow(url: string, interactive: boolean): Promise<string> {
   return new Promise<string>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(
+        new Error(
+          "Google 授权超时：浏览器可能拦截了弹窗。请在 Brave/Chrome 中允许 SafeCallRecorder 的弹出窗口，或暂时关闭 Shields 后重试。"
+        )
+      );
+    }, 120_000);
     chrome.identity.launchWebAuthFlow({ url, interactive }, (redirectedTo) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       const err = chrome.runtime.lastError;
       if (err || !redirectedTo) {
-        reject(new Error(err?.message || "Google 授权被取消或失败"));
+        const msg = err?.message || "Google 授权被取消或失败";
+        reject(
+          new Error(
+            /popup|blocked|closed|user/i.test(msg)
+              ? `${msg}。若使用 Brave，请在地址栏 Shields 中允许弹出窗口，或换用 Chrome 试一次。`
+              : msg
+          )
+        );
         return;
       }
       resolve(redirectedTo);

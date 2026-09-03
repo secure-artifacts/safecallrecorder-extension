@@ -81,5 +81,8 @@ export function friendlyGoogleConnectError(message: string, redirectUri?: string
   if (lower.includes("access_denied") || lower.includes("403")) {
     return "Google 访问遭拒。请在 Google Cloud → 目标对象 → 测试用户 中添加你的 Gmail，并确认发布状态为「测试中」。";
   }
+  if (lower.includes("超时") || lower.includes("popup") || lower.includes("blocked") || lower.includes("shields")) {
+    return message;
+  }
   return message;
 }
