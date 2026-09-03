@@ -1,4 +1,4 @@
-import { getSettings, storageGetDirect, storageRemoveDirect, storageSetDirect } from "../extension-storage";
+import { getSettings, setSettings, storageGet, storageRemove, storageSet } from "../extension-storage";
 import { MessageType, requestId, type Request, type Response } from "../messages";
 import {
   DRIVE_SCOPES,
@@ -25,17 +25,17 @@ function hasIdentityApi(): boolean {
 }
 
 async function readTokenCache(): Promise<TokenCache | null> {
-  const data = await storageGetDirect(TOKEN_CACHE_KEY);
+  const data = await storageGet(TOKEN_CACHE_KEY);
   const cache = data[TOKEN_CACHE_KEY] as TokenCache | undefined;
   return cache?.accessToken ? cache : null;
 }
 
 async function writeTokenCache(cache: TokenCache | null) {
   if (!cache) {
-    await storageRemoveDirect(TOKEN_CACHE_KEY);
+    await storageRemove(TOKEN_CACHE_KEY);
     return;
   }
-  await storageSetDirect({ [TOKEN_CACHE_KEY]: cache });
+  await storageSet({ [TOKEN_CACHE_KEY]: cache });
 }
 
 export async function clearGoogleTokenCache() {
@@ -142,9 +142,13 @@ export async function getGoogleAuthToken(interactive: boolean): Promise<string> 
 
   const useWebFlow = usesUiOAuthClientId(settings) || !getManifestOAuthClientId();
   if (useWebFlow) {
-    const cached = await readTokenCache();
-    if (cached && cached.clientId === clientId && cached.expiresAt > Date.now() + 60_000) {
-      return cached.accessToken;
+    try {
+      const cached = await readTokenCache();
+      if (cached && cached.clientId === clientId && cached.expiresAt > Date.now() + 60_000) {
+        return cached.accessToken;
+      }
+    } catch {
+      /* storage proxy may fail briefly — fall through to SW auth */
     }
   }
 
@@ -202,9 +206,7 @@ export async function ensureGoogleAccountEmailSaved(): Promise<string | undefine
     const token = await getGoogleAuthToken(false);
     const email = (await fetchGoogleAccountEmail(token))?.trim();
     if (!email) return undefined;
-    await storageSetDirect({
-      settings: { ...settings, googleDriveAccountEmail: email }
-    });
+    await setSettings({ googleDriveAccountEmail: email });
     return email;
   } catch {
     return undefined;
