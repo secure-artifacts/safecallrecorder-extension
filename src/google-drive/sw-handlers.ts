@@ -1,4 +1,10 @@
-import { connectGoogleAccount, ensureGoogleAccountEmailSaved, getExtensionAuthInfo, revokeGoogleAuthToken } from "./auth";
+import {
+  connectGoogleAccount,
+  ensureGoogleAccountEmailSaved,
+  getExtensionAuthInfo,
+  getGoogleAuthTokenInBackground,
+  revokeGoogleAuthToken
+} from "./auth";
 import { isGoogleDriveConfigured } from "./config";
 import { createDriveFolder, ensureDefaultDriveFolder, listDriveFolders } from "./drive-api";
 import { uploadSessionMp3ToDrive } from "./upload-service";
@@ -102,6 +108,12 @@ export async function handleGoogleDriveMessage(
     await saveSettings({ googleDriveFolderId: folder.id, googleDriveFolderName: folder.name });
     const email = await ensureGoogleAccountEmailSaved().catch(() => undefined);
     return { ...folder, email };
+  }
+
+  if (type === "GOOGLE_DRIVE_GET_AUTH_TOKEN") {
+    const interactive = payload.interactive !== false;
+    const token = await getGoogleAuthTokenInBackground(interactive);
+    return { token };
   }
 
   if (type === "GOOGLE_DRIVE_UPLOAD_MP3") {

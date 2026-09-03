@@ -1,4 +1,5 @@
 import { getSettings, storageGetDirect, storageRemoveDirect, storageSetDirect } from "../extension-storage";
+import { MessageType, requestId, type Request, type Response } from "../messages";
 import {
   DRIVE_SCOPES,
   getGoogleRedirectUri,
@@ -90,7 +91,24 @@ async function getAuthTokenFromManifest(interactive: boolean): Promise<string> {
   });
 }
 
-export async function getGoogleAuthToken(interactive: boolean): Promise<string> {
+async function requestAuthTokenViaServiceWorker(interactive: boolean): Promise<string> {
+  const response = await chrome.runtime.sendMessage({
+    type: MessageType.GoogleDriveGetAuthToken,
+    target: "service-worker",
+    requestId: requestId(),
+    payload: { interactive }
+  } satisfies Request);
+  const res = response as Response;
+  if (!res?.ok) {
+    throw new Error(res?.error?.message || "无法从后台获取 Google 授权令牌");
+  }
+  const token = (res.data as { token?: string } | undefined)?.token;
+  if (!token) throw new Error("无法从后台获取 Google 授权令牌");
+  return token;
+}
+
+/** Token acquisition for contexts without chrome.identity (e.g. offscreen document). */
+export async function getGoogleAuthTokenInBackground(interactive: boolean): Promise<string> {
   const settings = await getSettings();
   const clientId = await resolveGoogleClientId(settings);
   if (!clientId) throw new Error(googleDriveSetupHint());
@@ -115,6 +133,26 @@ export async function getGoogleAuthToken(interactive: boolean): Promise<string> 
     }
   }
   return getAuthTokenFromManifest(interactive);
+}
+
+export async function getGoogleAuthToken(interactive: boolean): Promise<string> {
+  const settings = await getSettings();
+  const clientId = await resolveGoogleClientId(settings);
+  if (!clientId) throw new Error(googleDriveSetupHint());
+
+  const useWebFlow = usesUiOAuthClientId(settings) || !getManifestOAuthClientId();
+  if (useWebFlow) {
+    const cached = await readTokenCache();
+    if (cached && cached.clientId === clientId && cached.expiresAt > Date.now() + 60_000) {
+      return cached.accessToken;
+    }
+  }
+
+  if (!hasIdentityApi()) {
+    return requestAuthTokenViaServiceWorker(interactive);
+  }
+
+  return getGoogleAuthTokenInBackground(interactive);
 }
 
 export async function revokeGoogleAuthToken(): Promise<void> {
