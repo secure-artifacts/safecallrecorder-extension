@@ -1257,9 +1257,10 @@ function friendlyError(msg: string) {
   return msg;
 }
 
-function setStatus(text: string) {
+function setStatus(text: string, options?: { scroll?: boolean }) {
   const el = $("status");
   el.textContent = text;
+  if (options?.scroll === false) return;
   el.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
@@ -3405,7 +3406,7 @@ $("googleDriveClearConfig").onclick = () => {
       googleDriveAuthValid = false;
       syncDownloadSettingsUi();
       syncGoogleDriveSettingsUi();
-      setStatus("已清空 Google 云端配置。如需再次使用，请重新填写客户端 ID 并连接账号。");
+      setStatus("已清空 Google 云端配置。如需再次使用，请重新填写客户端 ID 并连接账号。", { scroll: false });
     } catch (e) {
       setStatus(friendlyError(e instanceof Error ? e.message : String(e)));
     }
