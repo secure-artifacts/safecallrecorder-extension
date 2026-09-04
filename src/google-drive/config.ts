@@ -73,7 +73,7 @@ export function friendlyGoogleConnectError(message: string, redirectUri?: string
         : "https://<扩展ID>.chromiumapp.org/");
     return (
       `Google 授权失败：重定向 URI 不匹配。` +
-      `在控制面板填写客户端 ID 时，必须创建「Web 应用」类型（不是「Chrome 扩展程序」）。` +
+      `在控制面板填写客户端 ID 时，必须创建「Web 应用」类型（不是「Chrome 扩展程序」或「Chrome 应用」）。` +
       `打开 Google Cloud → 客户端 → 编辑或新建 Web 应用 → 已授权的重定向 URI 添加：${uri} ` +
       `（须完全一致，含 https:// 和末尾 /）。保存后把该 Web 应用的客户端 ID 粘贴到控制面板，再点「连接 Google 账号」。`
     );

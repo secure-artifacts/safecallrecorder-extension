@@ -367,7 +367,7 @@
           <summary>步骤 4：创建 OAuth 客户端（推荐 · Web 应用）</summary>
           <div class="google-drive-setup-body">
             <p class="google-drive-where google-drive-where-warn"><strong>重要：</strong>在控制面板填写「OAuth 客户端 ID」时，必须创建 <strong>Web 应用</strong> 类型并配置重定向 URI。
-              若创建的是「Chrome 扩展程序」类型，连接时会报 <strong>redirect_uri_mismatch</strong>（错误 400）。</p>
+              若创建的是「Chrome 扩展程序」或「Chrome 应用」类型，连接时会报 <strong>redirect_uri_mismatch</strong>（错误 400）。</p>
             <p class="google-drive-where google-drive-where-warn"><strong>⚠ 创建前请准备记事本：</strong>点「创建」后弹窗会同时给出<strong>客户端 ID</strong>与<strong>客户端密钥</strong>，请<strong>立即复制保存</strong>（密钥只显示一次）。然后再粘贴到本插件输入框。</p>
             <ol class="google-drive-setup-sublist">
               <li>打开：<a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"><strong>→ 凭据 / 客户端页面</strong></a></li>
@@ -484,7 +484,8 @@
           <button type="button" id="googleDriveClearConfig" class="btn danger outline small">清空云端配置</button>
           <input type="file" id="googleDriveImportConfigFile" accept=".json,application/json" hidden>
         </div>
-        <p class="hint">换浏览器：先<strong>导出云端配置</strong>（含客户端 ID、密钥与登录状态），在新浏览器<strong>导入</strong>后通常可直接上传，无需再点「连接 Google 账号」（须已启用长期授权且 refresh token 仍有效）。</p>
+        <p class="hint">换浏览器：先<strong>导出云端配置</strong>（含客户端 ID、密钥与登录状态），在新浏览器<strong>导入</strong>后通常可直接上传，无需再点「连接 Google 账号」（须已启用长期授权且 refresh token 仍有效）。也可用 ⚙ 设置里的<strong>导出/导入全部设置</strong>一并迁移其他选项。</p>
+        <p class="hint"><strong>断开连接</strong>仅清除登录；<strong>清空云端配置</strong>会清除 ID、密钥、登录与文件夹（「启用 Google Drive 上传」勾选不变）。</p>
         <p class="hint warning">配置文件含客户端密钥与登录令牌，等同于账号权限，请勿分享、邮件发送或上传到公开网盘。</p>
         <p class="hint">启用后，MP3 生成完成会自动上传到你选择的 Google Drive 文件夹。历史记录里也可手动点「上传云端」。</p>
       </div>
