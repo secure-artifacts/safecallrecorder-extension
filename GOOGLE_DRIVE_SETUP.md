@@ -67,7 +67,7 @@ SafeCallRecorder 可将 MP3 上传到 **Google Drive**（用户自己的 Google 
 **重要：** 在控制面板填写客户端 ID 时，必须创建 **Web 应用** 类型。若创建的是 **Chrome 扩展程序** 类型，连接时会报 `redirect_uri_mismatch`（错误 400）。
 
 1. 打开 [凭据 / 客户端](https://console.cloud.google.com/apis/credentials) → **客户端** → **创建客户端**。
-2. 应用类型选 **Web 应用**（不要选 Chrome 扩展程序）。
+2. 应用类型选 **Web 应用**（**不要**选 Chrome 扩展程序、Chrome 应用或其他类型）。
 3. **已授权的重定向 URI** → **添加 URI**，粘贴控制面板显示的链接。**必须添加**，格式如下：
    - `https://` + 你的扩展 ID + `.chromiumapp.org/`
    - 示例（本地加载扩展）：`https://emelhfpkanogoiegfanfbbgmglhiblfp.chromiumapp.org/`
@@ -163,13 +163,13 @@ SafeCallRecorder 可将 MP3 上传到 **Google Drive**（用户自己的 Google 
 
 | 概览页没有「开始」/「测试中」 | 正常；去 **目标对象** 页配置，发布状态也在该页 |
 
-| 扩展 ID 填哪个 | 控制面板显示的 32 位扩展 ID，不是 Cloud 项目 ID |
+| 扩展 ID 填哪个 | 仅用于对照 Web 应用重定向 URI 中的扩展 ID 段；创建 OAuth 客户端时仍须选 **Web 应用**，不是 Chrome 扩展程序 |
 
 | `redirect_uri_mismatch` / 错误 400 | 须创建 **Web 应用** 客户端，并把控制面板显示的重定向 URI 完整加入「已授权的重定向 URI」；Chrome 扩展程序类型不适用 |
 
 | `access blocked` / 403 | 在 **目标对象** → **测试用户** 中添加你的 Gmail |
 
-| 连接失败 / invalid client | 检查客户端 ID；Chrome 扩展类型须绑定当前扩展 ID |
+| 连接失败 / invalid client | 确认客户端 ID 来自 **Web 应用** 类型；检查重定向 URI 是否与控制面板显示完全一致 |
 
 | 无法列出文件夹 | 确认已启用 Drive API，并重新授权 |
 

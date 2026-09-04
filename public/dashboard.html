@@ -251,7 +251,7 @@
         <input type="checkbox" id="googleDriveEnabled">
       </label>
       <div class="google-drive-setup-guide hidden" id="googleDriveSetupGuide">
-        <p class="hint google-drive-auth-hint"><strong>创建 OAuth 客户端时会用到（请先复制保存）：</strong><br>扩展 ID：<code id="googleDriveExtensionId">—</code><br>Web 应用重定向 URI：<code id="googleDriveRedirectUri">—</code><br><span class="google-drive-auth-note"><strong>本地加载扩展（dist 目录）完全可以</strong>，扩展 ID 仍是上面这串 32 位字母（你的是 <code>chrome://extensions</code> 卡片里的 ID，<strong>不是</strong> <code>chrome-extension://…/dashboard.html</code> 这种地址）。Google Cloud 里填<strong>重定向 URI</strong>时，用上面的 <code>https://….chromiumapp.org/</code>，<strong>不要</strong>填 <code>chrome-extension://</code> 开头的内容。</span></p>
+        <p class="hint google-drive-auth-hint"><strong>创建 OAuth 客户端时会用到（请先复制保存）：</strong><br>扩展 ID：<code id="googleDriveExtensionId">—</code><br>Web 应用重定向 URI：<code id="googleDriveRedirectUri">—</code><br><span class="google-drive-auth-note"><strong>在控制面板粘贴客户端 ID 时，Google Cloud 必须选「Web 应用」</strong>（不是 Chrome 扩展程序 / Chrome 应用）。重定向 URI 用上面的 <code>https://….chromiumapp.org/</code>，<strong>不要</strong>填 <code>chrome-extension://</code>。扩展 ID 仅用于对照重定向 URI 中的那串字母，不是用来创建 Chrome 扩展程序类型客户端。</span></p>
         <p class="hint warning google-drive-save-reminder" role="note"><strong>⚠ 请及时保存客户端 ID 与客户端密钥</strong><br>Google Cloud 点「创建」后，弹窗里的<strong>客户端 ID</strong>和<strong>客户端密钥（GOCSPX-…）</strong>请<strong>立刻复制到记事本或密码管理器</strong>。密钥<strong>只显示一次</strong>，关闭弹窗后无法再看完整内容；丢失密钥只能「添加密钥」重新生成，并需重新连接 Google 账号。</p>
         <label class="google-drive-client-row">
           <span>OAuth 客户端 ID</span>
@@ -372,7 +372,7 @@
             <ol class="google-drive-setup-sublist">
               <li>打开：<a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"><strong>→ 凭据 / 客户端页面</strong></a></li>
               <li>点左侧 <strong>客户端</strong> → <strong>创建客户端</strong></li>
-              <li><strong>应用类型</strong> 选 <strong>Web 应用</strong>（不要选 Chrome 扩展程序）</li>
+              <li><strong>应用类型</strong> 选 <strong>Web 应用</strong>（<strong>不要</strong>选 Chrome 扩展程序、Chrome 应用或其他类型）</li>
               <li><strong>名称</strong> 填 <code>SafeCallRecorder</code></li>
               <li><strong>已授权的重定向 URI</strong> → 点 <strong>添加 URI</strong></li>
               <li><strong>必须添加</strong>本页最上方「Web 应用重定向 URI」显示的完整链接（每人不同，格式固定）：
