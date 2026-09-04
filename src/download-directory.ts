@@ -21,7 +21,7 @@ function openDirDb(): Promise<IDBDatabase> {
 
 export function supportsDirectoryPicker(): boolean {
   if (typeof globalThis === "undefined") return false;
-  const picker = (globalThis as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
+  const picker = (globalThis as unknown as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
   return typeof picker === "function";
 }
 

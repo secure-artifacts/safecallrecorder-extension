@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - name: Install Dependencies
@@ -40,10 +40,11 @@ jobs:
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: '*.zip'
+          subject-path: safecallrecorder-extension-*.zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: '*.zip'
+          files: safecallrecorder-extension-*.zip
           generate_release_notes: true
+          fail_on_unmatched_files: true

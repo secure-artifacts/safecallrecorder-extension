@@ -1,4 +1,4 @@
-import type { AppSettings } from "../types";
+import type { AppSettings, StopDownloadMode } from "../types";
 
 export function shouldAutoDownloadMp3Locally(settings: AppSettings): boolean {
   if (!settings.googleDriveEnabled) return true;
