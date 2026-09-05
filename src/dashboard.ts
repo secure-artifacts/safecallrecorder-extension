@@ -1421,6 +1421,35 @@ async function copyDriveUploadFileName() {
   setStatus(ok ? "录音名称已复制" : "复制失败，请手动复制名称");
 }
 
+async function copyGoogleDriveExtensionId() {
+  const id = chrome.runtime.id?.trim();
+  if (!id) {
+    setStatus("无法读取扩展 ID");
+    return;
+  }
+  const ok = await copyTextToClipboard(id);
+  setStatus(ok ? "扩展 ID 已复制，可到 Google Cloud 或扩展管理页核对" : "复制失败，请手动选中上方 ID 复制");
+}
+
+async function copyGoogleDriveRedirectUri() {
+  const uri = getGoogleRedirectUri();
+  const ok = await copyTextToClipboard(uri);
+  setStatus(
+    ok
+      ? "重定向 URI 已复制。请到 Google Cloud → Web 应用客户端 → 已授权的重定向 URI 粘贴"
+      : "复制失败，请手动选中上方 URI 复制"
+  );
+}
+
+function openExtensionsManagementPage() {
+  const id = chrome.runtime.id;
+  const url =
+    typeof navigator !== "undefined" && /Edg\//.test(navigator.userAgent)
+      ? `edge://extensions/?id=${id}`
+      : `chrome://extensions/?id=${id}`;
+  void chrome.tabs.create({ url });
+}
+
 type ConfirmOptions = {
   title: string;
   body: string;
@@ -2559,10 +2588,14 @@ function syncGoogleDriveSettingsUi() {
   }
   const extId = $("googleDriveExtensionId");
   const redirect = $("googleDriveRedirectUri");
-  if (extId) extId.textContent = chrome.runtime.id;
-  if (redirect) redirect.textContent = getGoogleRedirectUri();
+  const extensionId = chrome.runtime.id;
+  const redirectUri = getGoogleRedirectUri();
+  if (extId) extId.textContent = extensionId;
+  if (redirect) redirect.textContent = redirectUri;
   const redirectTutorial = $("googleDriveRedirectUriTutorial");
-  if (redirectTutorial) redirectTutorial.textContent = getGoogleRedirectUri();
+  if (redirectTutorial) redirectTutorial.textContent = redirectUri;
+  const extIdTutorial = $("googleDriveExtensionIdTutorial");
+  if (extIdTutorial) extIdTutorial.textContent = extensionId;
   const mode = $<HTMLSelectElement>("googleDriveUploadMode");
   if (mode) mode.value = settings.googleDriveUploadMode || "local_and_cloud";
   const auto = $<HTMLInputElement>("googleDriveAutoUploadOnStop");
@@ -3837,6 +3870,9 @@ fillBitrates();
 installDownloadLifecycleListeners();
 $("driveUploadCopyName").onclick = () => void copyDriveUploadFileName();
 $("driveUploadCopyLink").onclick = () => void copyDriveUploadLink();
+$("googleDriveCopyExtensionId").onclick = () => void copyGoogleDriveExtensionId();
+$("googleDriveCopyRedirectUri").onclick = () => void copyGoogleDriveRedirectUri();
+$("googleDriveOpenExtensionsPage").onclick = () => openExtensionsManagementPage();
 onDriveUploadEvent(handleDriveUploadEvent);
 
 function showEnvFatal(message: string) {

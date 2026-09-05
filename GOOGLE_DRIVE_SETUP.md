@@ -64,14 +64,16 @@ SafeCallRecorder 可将 MP3 上传到 **Google Drive**（用户自己的 Google 
 
 ## 步骤 4：创建 OAuth 客户端（推荐 · Web 应用）
 
-**重要：** 在控制面板填写客户端 ID 时，必须创建 **Web 应用** 类型。若创建的是 **Chrome 扩展程序** 类型，连接时会报 `redirect_uri_mismatch`（错误 400）。
+**重要：** 在控制面板填写「OAuth 客户端 ID」时，必须创建 **Web 应用** 类型。若创建的是 **Chrome 扩展程序** 类型，连接时会报 `redirect_uri_mismatch`（错误 400）。
+
+**扩展 ID 与重定向 URI 不要手写：** 打开插件控制面板 → 勾选 **Google 云端上传** → 顶部蓝色卡片会**自动识别**当前安装的扩展 ID 与重定向 URI。点 **复制重定向 URI** 粘贴到 Google Cloud。扩展 ID 可在 `chrome://extensions`（Edge：`edge://extensions`）核对，或点 **打开扩展管理页核对 ID**。
 
 1. 打开 [凭据 / 客户端](https://console.cloud.google.com/apis/credentials) → **客户端** → **创建客户端**。
 2. 应用类型选 **Web 应用**（**不要**选 Chrome 扩展程序、Chrome 应用或其他类型）。
-3. **已授权的重定向 URI** → **添加 URI**，粘贴控制面板显示的链接。**必须添加**，格式如下：
-   - `https://` + 你的扩展 ID + `.chromiumapp.org/`
-   - 示例（本地加载扩展）：`https://emelhfpkanogoiegfanfbbgmglhiblfp.chromiumapp.org/`
-   - **以控制面板「Web 应用重定向 URI」那一行为准**（每人扩展 ID 不同）
+3. **已授权的重定向 URI** → **添加 URI** → 粘贴控制面板蓝色卡片 **「复制重定向 URI」** 的内容（插件自动识别，**不要**用他人示例）。格式：
+   - `https://` + 扩展 ID + `.chromiumapp.org/`
+   - v1.4.47+ 固定 ID 示例：`https://bbmllidogccokoahnlmgehbikklpdcgd.chromiumapp.org/`
+   - **以控制面板卡片显示为准**
    - **不要**填 `chrome-extension://…/dashboard.html`
 4. **创建** → 弹窗会同时显示 **客户端 ID** 与 **客户端密钥** → **立即复制到记事本/密码管理器**（密钥只显示一次）→ 再粘贴到控制面板对应输入框。
 
@@ -172,7 +174,7 @@ SafeCallRecorder 可将 MP3 上传到 **Google Drive**（用户自己的 Google 
 
 | 概览页没有「开始」/「测试中」 | 正常；去 **目标对象** 页配置，发布状态也在该页 |
 
-| 扩展 ID 填哪个 | 仅用于对照 Web 应用重定向 URI 中的扩展 ID 段；创建 OAuth 客户端时仍须选 **Web 应用**，不是 Chrome 扩展程序 |
+| 扩展 ID 填哪个 | v1.4.47+ 已固定为 `bbmllidogccokoahnlmgehbikklpdcgd`（本地与 Release zip 相同）；重定向 URI 见控制面板 |
 
 | `redirect_uri_mismatch` / 错误 400 | 须创建 **Web 应用** 客户端，并把控制面板显示的重定向 URI 完整加入「已授权的重定向 URI」；Chrome 扩展程序类型不适用 |
 

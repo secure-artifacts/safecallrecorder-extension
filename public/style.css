@@ -682,6 +682,59 @@ input[type="text"]:focus, select:focus {
   color: var(--muted, #64748b);
   font-weight: 400;
 }
+.google-drive-oauth-identity {
+  margin: 0 0 14px;
+  padding: 14px 14px 12px;
+  border: 1px solid #99f6e4;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f0fdfa 0%, #ecfeff 100%);
+}
+.google-drive-oauth-identity h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: #0f766e;
+}
+.google-drive-oauth-lead { margin-top: 0; margin-bottom: 12px; }
+.google-drive-oauth-field {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #ccfbf1;
+}
+.google-drive-oauth-field:last-of-type { margin-bottom: 10px; }
+.google-drive-oauth-field-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.google-drive-oauth-value {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-all;
+  user-select: all;
+}
+.google-drive-oauth-where {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.google-drive-oauth-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.google-drive-oauth-steps li { margin-bottom: 4px; }
+.google-drive-oauth-steps li:last-child { margin-bottom: 0; }
 .google-drive-setup-step {
   margin: 8px 0 0;
   border: 1px solid var(--line);

@@ -252,7 +252,35 @@
         <input type="checkbox" id="googleDriveEnabled">
       </label>
       <div class="google-drive-setup-guide hidden" id="googleDriveSetupGuide">
-        <p class="hint google-drive-auth-hint"><strong>创建 OAuth 客户端时会用到（请先复制保存）：</strong><br>扩展 ID：<code id="googleDriveExtensionId">—</code><br>Web 应用重定向 URI：<code id="googleDriveRedirectUri">—</code><br><span class="google-drive-auth-note"><strong>在控制面板粘贴客户端 ID 时，Google Cloud 必须选「Web 应用」</strong>（不是 Chrome 扩展程序 / Chrome 应用）。重定向 URI 用上面的 <code>https://….chromiumapp.org/</code>，<strong>不要</strong>填 <code>chrome-extension://</code>。扩展 ID 仅用于对照重定向 URI 中的那串字母，不是用来创建 Chrome 扩展程序类型客户端。</span></p>
+        <section class="google-drive-oauth-identity" id="googleDriveOAuthIdentity" aria-labelledby="googleDriveOAuthIdentityTitle">
+          <h3 id="googleDriveOAuthIdentityTitle">本插件已自动识别 · 请复制到 Google Cloud</h3>
+          <p class="hint google-drive-oauth-lead">下面内容由插件读取<strong>当前这次安装</strong>的信息生成，<strong>请勿手写或套用他人示例</strong>。配置 OAuth 时只需复制下面两项。</p>
+
+          <div class="google-drive-oauth-field">
+            <div class="google-drive-oauth-field-head">
+              <strong>① 扩展 ID（32 位）</strong>
+              <button type="button" id="googleDriveCopyExtensionId" class="btn outline small">复制扩展 ID</button>
+            </div>
+            <code id="googleDriveExtensionId" class="google-drive-oauth-value">—</code>
+            <p class="hint google-drive-oauth-where"><strong>在哪里核对：</strong>浏览器地址栏打开 <code>chrome://extensions</code>（Microsoft Edge 为 <code>edge://extensions</code>）→ 找到 <strong>SafeCallRecorder</strong> → 卡片上的「ID」必须与上面<strong>完全一致</strong>。若不一致，说明加载的不是本插件或装了两份，请只保留一份后刷新本页。</p>
+            <button type="button" id="googleDriveOpenExtensionsPage" class="btn outline small">打开扩展管理页核对 ID</button>
+          </div>
+
+          <div class="google-drive-oauth-field">
+            <div class="google-drive-oauth-field-head">
+              <strong>② Web 应用重定向 URI（连接 Google 必填）</strong>
+              <button type="button" id="googleDriveCopyRedirectUri" class="btn outline small">复制重定向 URI</button>
+            </div>
+            <code id="googleDriveRedirectUri" class="google-drive-oauth-value">—</code>
+            <p class="hint google-drive-oauth-where"><strong>填到哪里：</strong><a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud → 凭据</a> → 点你的 <strong>Web 应用</strong> 客户端名称 → <strong>已授权的重定向 URI</strong> → <strong>添加 URI</strong> → 粘贴上面整段（须含 <code>https://</code> 和末尾 <code>/</code>）。<strong>不要</strong>填 <code>chrome-extension://</code> 地址。</p>
+          </div>
+
+          <ol class="google-drive-oauth-steps hint">
+            <li>复制上面的 <strong>重定向 URI</strong>，粘贴到 Google Cloud（步骤见下方「步骤 4」）。</li>
+            <li>创建 Web 应用客户端后，把 <strong>客户端 ID</strong> 与 <strong>客户端密钥</strong> 粘贴到本页下方输入框。</li>
+            <li>点 <strong>连接 Google 账号</strong>。若报 <code>redirect_uri_mismatch</code>，说明 Google Cloud 里的 URI 与上面②不一致，请重新复制粘贴。</li>
+          </ol>
+        </section>
         <p class="hint warning google-drive-save-reminder" role="note"><strong>⚠ 请及时保存客户端 ID 与客户端密钥</strong><br>Google Cloud 点「创建」后，弹窗里的<strong>客户端 ID</strong>和<strong>客户端密钥（GOCSPX-…）</strong>请<strong>立刻复制到记事本或密码管理器</strong>。密钥<strong>只显示一次</strong>，关闭弹窗后无法再看完整内容；丢失密钥只能「添加密钥」重新生成，并需重新连接 Google 账号。</p>
         <label class="google-drive-client-row">
           <span>OAuth 客户端 ID</span>
@@ -376,12 +404,13 @@
               <li><strong>应用类型</strong> 选 <strong>Web 应用</strong>（<strong>不要</strong>选 Chrome 扩展程序、Chrome 应用或其他类型）</li>
               <li><strong>名称</strong> 填 <code>SafeCallRecorder</code></li>
               <li><strong>已授权的重定向 URI</strong> → 点 <strong>添加 URI</strong></li>
-              <li><strong>必须添加</strong>本页最上方「Web 应用重定向 URI」显示的完整链接（每人不同，格式固定）：
+              <li><strong>必须粘贴</strong>本页上方蓝色卡片「② Web 应用重定向 URI」里的完整链接（插件已自动识别，每人安装可能不同）：
                 <ul>
-                  <li>格式：<code>https://</code> + <strong>你的扩展 ID</strong> + <code>.chromiumapp.org/</code></li>
-                  <li>示例（本地扩展）：<code>https://emelhfpkanogoiegfanfbbgmglhiblfp.chromiumapp.org/</code></li>
-                  <li><strong>以你控制面板实际显示为准</strong>（见本页顶部 <code id="googleDriveRedirectUriTutorial">—</code>），整段复制，含 <code>https://</code> 和末尾 <code>/</code></li>
-                  <li><strong>不要</strong>填 <code>chrome-extension://…/dashboard.html</code> 这种插件页面地址</li>
+                  <li>点卡片上的 <strong>复制重定向 URI</strong>，整段粘贴到 Google Cloud</li>
+                  <li>格式固定为：<code>https://</code> + <strong>扩展 ID</strong> + <code>.chromiumapp.org/</code></li>
+                  <li>当前识别结果：<code id="googleDriveRedirectUriTutorial">—</code>（应与卡片②一致）</li>
+                  <li>扩展 ID 见卡片①：<code id="googleDriveExtensionIdTutorial">—</code></li>
+                  <li><strong>不要</strong>填 <code>chrome-extension://…/dashboard.html</code> 或网上别人的示例 URI</li>
                 </ul>
               </li>
               <li>点 <strong>创建</strong> → 弹出窗口会同时显示：
@@ -435,7 +464,7 @@
             <ol class="google-drive-setup-sublist">
               <li>左侧 <strong>客户端</strong> → <strong>创建客户端</strong></li>
               <li><strong>应用类型</strong> 选 <strong>Chrome 扩展程序</strong></li>
-              <li><strong>扩展 ID</strong> 填本页最上方显示的 32 位扩展 ID（<strong>不是</strong> Cloud 项目 ID）</li>
+              <li><strong>扩展 ID</strong> 填本页上方卡片「① 扩展 ID」显示的 32 位字母（<strong>不是</strong> Cloud 项目 ID；点 <strong>复制扩展 ID</strong>）</li>
               <li>点 <strong>创建</strong> → 将客户端 ID 写入 <code>manifest.json</code>，而不是控制面板输入框</li>
             </ol>
           </div>

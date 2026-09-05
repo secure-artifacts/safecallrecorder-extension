@@ -467,11 +467,16 @@
           <p class="help-lead">可选功能。启用后，MP3 可同步到你 Google 账号下的 Drive 文件夹；录音原始数据仍保存在本机。</p>
           <h3>首次配置</h3>
           <ol>
-            <li>在 Google Cloud Console 创建 <strong>Web 应用</strong> 类型 OAuth 客户端并启用 Drive API（详见 <code>GOOGLE_DRIVE_SETUP.md</code>）。须把控制面板显示的<strong>重定向 URI</strong> 加入「已授权的重定向 URI」；<strong>不要</strong>选 Chrome 扩展程序 / Chrome 应用。</li>
-            <li>在控制面板 <strong>Google 云端上传</strong> 粘贴 <strong>OAuth 客户端 ID</strong> 与 <strong>OAuth 客户端密钥</strong>（密钥在 Google 创建客户端时复制；仅显示一次）。</li>
+            <li>勾选控制面板 <strong>Google 云端上传</strong> 后，顶部蓝色卡片会<strong>自动识别本机扩展 ID 与重定向 URI</strong>。点 <strong>复制重定向 URI</strong>，粘贴到 Google Cloud → Web 应用客户端 → <strong>已授权的重定向 URI</strong>（详见下方说明）。</li>
+            <li>在 Google Cloud Console 创建 <strong>Web 应用</strong> 类型 OAuth 客户端并启用 Drive API（详见 <code>GOOGLE_DRIVE_SETUP.md</code>）。<strong>不要</strong>选 Chrome 扩展程序 / Chrome 应用；<strong>不要</strong>手写或套用他人示例 URI。</li>
+            <li>核对扩展 ID：浏览器打开 <code>chrome://extensions</code>（Edge 为 <code>edge://extensions</code>）→ 找到 SafeCallRecorder → 卡片上的 ID 须与插件蓝色卡片①一致；也可点 <strong>打开扩展管理页核对 ID</strong>。</li>
+            <li>在控制面板粘贴 <strong>OAuth 客户端 ID</strong> 与 <strong>OAuth 客户端密钥</strong>（密钥在 Google 创建客户端时复制；仅显示一次）。</li>
             <li>勾选启用并 <strong>连接 Google 账号</strong>；成功且填写了密钥时，会显示 <strong>Google 已长期授权</strong>。</li>
             <li>点 <strong>选择 Drive 文件夹</strong> 浏览并进入目标目录，再点 <strong>选择当前文件夹</strong>；或点 <strong>使用默认文件夹</strong> 自动创建 <code>SafeCallRecorder</code>。</li>
           </ol>
+          <div class="callout ok">
+            <strong>扩展 ID 与重定向 URI 以控制面板自动识别为准。</strong>每人、每次安装可能不同；GitHub Release zip 与本地 build 在 v1.4.47+ 使用相同固定 ID。若连接报 <code>redirect_uri_mismatch</code>，请重新复制卡片②粘贴到 Google Cloud，不要用旧教程里的示例。
+          </div>
           <h3>上传方式</h3>
           <ul>
             <li><strong>保存本地 + 上传云端</strong>：停止录音后，MP3 既保存到本机下载文件夹，也上传到 Drive。</li>
@@ -693,7 +698,7 @@
           </div>
         </section>
 
-        <p class="help-footer" id="helpVersion">使用说明版本：1.4.5</p>
+        <p class="help-footer" id="helpVersion">使用说明版本：1.4.6</p>
       </main>
     </div>
   </div>

@@ -65,7 +65,9 @@ describe("help system", () => {
     expect(html).toContain("导入云端配置");
     expect(html).toContain("导出全部设置");
     expect(html).toContain("清空云端配置");
-    expect(html).toContain("长期登录状态");
+    expect(html).toContain("复制重定向 URI");
+    expect(html).toContain("打开扩展管理页核对 ID");
+    expect(html).toContain("自动识别");
     expect(html).toContain("换浏览器后还要重新设置");
     expect(html).toContain("仅上传云端");
     expect(html).toContain("Google Drive 连接失败");
@@ -105,7 +107,7 @@ describe("help system", () => {
   });
 
   it("exports help content version", () => {
-    expect(HELP_CONTENT_VERSION).toBe("1.4.5");
+    expect(HELP_CONTENT_VERSION).toBe("1.4.6");
   });
 
   it("manifest includes Drive API host permission only for googleapis", () => {
