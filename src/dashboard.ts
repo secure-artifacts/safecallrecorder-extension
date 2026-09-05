@@ -1264,19 +1264,34 @@ function setStatus(text: string, options?: { scroll?: boolean }) {
   el.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
-function mergeSettingsFromPoll(incoming: AppSettings) {
-  flushGoogleDriveCredentialsFromUi();
+function mergeGoogleDriveCredentialsFromPoll(incoming: AppSettings) {
   const idInput = $<HTMLInputElement>("googleDriveClientId");
   const secretInput = $<HTMLInputElement>("googleDriveClientSecret");
   const uiClientId = idInput?.value ?? "";
   const uiClientSecret = secretInput?.value ?? "";
-  settings = { ...DEFAULT_SETTINGS, ...incoming };
-  if (uiClientId !== (incoming.googleDriveClientId ?? "")) {
+  const storedId = incoming.googleDriveClientId ?? "";
+  const storedSecret = incoming.googleDriveClientSecret ?? "";
+
+  if (document.activeElement === idInput) {
     settings.googleDriveClientId = uiClientId.trim() || undefined;
+  } else if (uiClientId && uiClientId !== storedId) {
+    settings.googleDriveClientId = uiClientId.trim() || undefined;
+  } else {
+    settings.googleDriveClientId = incoming.googleDriveClientId;
   }
-  if (uiClientSecret !== (incoming.googleDriveClientSecret ?? "")) {
+
+  if (document.activeElement === secretInput) {
     settings.googleDriveClientSecret = uiClientSecret.trim() || undefined;
+  } else if (uiClientSecret && uiClientSecret !== storedSecret) {
+    settings.googleDriveClientSecret = uiClientSecret.trim() || undefined;
+  } else {
+    settings.googleDriveClientSecret = incoming.googleDriveClientSecret;
   }
+}
+
+function mergeSettingsFromPoll(incoming: AppSettings) {
+  settings = { ...DEFAULT_SETTINGS, ...incoming };
+  mergeGoogleDriveCredentialsFromPoll(incoming);
 }
 
 async function syncGoogleDriveSettingsToStorage(): Promise<void> {
@@ -1313,6 +1328,7 @@ function resetGoogleDriveCredentialInputs() {
 }
 
 let driveUploadCopyUrl = "";
+let driveUploadCopyFileName = "";
 
 function setDriveUploadPanelVisible(visible: boolean) {
   $("driveUploadPanel").classList.toggle("hidden", !visible);
@@ -1333,6 +1349,7 @@ function showDriveUploadProgress(label: string, percent: number, indeterminate =
 
 function showDriveUploadComplete(fileName: string, webUrl: string) {
   driveUploadCopyUrl = webUrl;
+  driveUploadCopyFileName = fileName;
   setDriveUploadPanelVisible(true);
   $("driveUploadLabel").textContent = "上传完成";
   $<HTMLProgressElement>("driveUploadProgress").classList.add("hidden");
@@ -1344,6 +1361,7 @@ function showDriveUploadComplete(fileName: string, webUrl: string) {
 function hideDriveUploadPanel() {
   setDriveUploadPanelVisible(false);
   driveUploadCopyUrl = "";
+  driveUploadCopyFileName = "";
   $<HTMLProgressElement>("driveUploadProgress").classList.remove("hidden");
   $("driveUploadDone").classList.add("hidden");
 }
@@ -1392,6 +1410,15 @@ async function copyDriveUploadLink() {
   }
   const ok = await copyTextToClipboard(driveUploadCopyUrl);
   setStatus(ok ? "云端音频链接已复制" : "复制失败，请手动复制链接");
+}
+
+async function copyDriveUploadFileName() {
+  if (!driveUploadCopyFileName) {
+    setStatus("暂无录音名称");
+    return;
+  }
+  const ok = await copyTextToClipboard(driveUploadCopyFileName);
+  setStatus(ok ? "录音名称已复制" : "复制失败，请手动复制名称");
 }
 
 type ConfirmOptions = {
@@ -2132,6 +2159,7 @@ async function refresh() {
       if (!deferHistorySync) {
         syncDownloadSettingsUi();
         syncAutoStartSettingsUi();
+        syncGoogleDriveSettingsUi();
         const sens = $<HTMLSelectElement>("detectionSensitivity");
         if (sens) sens.value = settings.detectionSensitivity || "standard";
       }
@@ -3311,6 +3339,12 @@ function scheduleGoogleDriveClientIdSave() {
   googleDriveClientIdSaveTimer = setTimeout(() => void persistGoogleDriveClientId(), 500);
 }
 
+function flushPendingGoogleDriveCredentialSaves() {
+  clearTimeout(googleDriveClientIdSaveTimer);
+  clearTimeout(googleDriveClientSecretSaveTimer);
+  flushGoogleDriveCredentialsFromUi();
+}
+
 $("googleDriveEnabled").onchange = async () => {
   settings.googleDriveEnabled = $<HTMLInputElement>("googleDriveEnabled").checked;
   syncGoogleDriveSettingsUi();
@@ -3788,6 +3822,11 @@ document.addEventListener("visibilitychange", () => {
   if (!localMediaPlaybackActive && !playingAudio) void ensurePreviewMonitor();
 });
 window.addEventListener("beforeunload", () => {
+  flushPendingGoogleDriveCredentialSaves();
+  void setSettings({
+    googleDriveClientId: settings.googleDriveClientId,
+    googleDriveClientSecret: settings.googleDriveClientSecret
+  });
   void stopPreview();
   clearLocalMediaPlaylist();
   void ask(MessageType.UnsubscribeLevels).catch(() => undefined);
@@ -3796,6 +3835,7 @@ window.addEventListener("beforeunload", () => {
 ensureMeterHost($("liveMonitor"));
 fillBitrates();
 installDownloadLifecycleListeners();
+$("driveUploadCopyName").onclick = () => void copyDriveUploadFileName();
 $("driveUploadCopyLink").onclick = () => void copyDriveUploadLink();
 onDriveUploadEvent(handleDriveUploadEvent);
 
@@ -3817,6 +3857,7 @@ void (async () => {
   }
   try {
     settings = await getSettings();
+    syncGoogleDriveSettingsUi();
   } catch (e) {
     console.warn("[SafeCallRecorder] settings load failed, using defaults", e, diagnoseStorageEnvironment());
     settings = { ...DEFAULT_SETTINGS };
