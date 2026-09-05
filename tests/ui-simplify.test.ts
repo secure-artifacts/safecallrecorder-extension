@@ -33,6 +33,7 @@ describe("ui simplification contract", () => {
     expect(html).toContain("导入备份");
     expect(html).toContain("清空历史");
     expect(html).toContain('id="googleDriveOAuthIdentity"');
+    expect(html).toContain("步骤 0：确认扩展 ID 与重定向 URI");
     expect(html).toContain('id="googleDriveCopyRedirectUri"');
     expect(html).toContain('id="googleDriveOpenExtensionsPage"');
     expect(html).not.toContain("emelhfpkanogoiegfanfbbgmglhiblfp");

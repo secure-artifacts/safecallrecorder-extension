@@ -663,6 +663,12 @@ input[type="text"]:focus, select:focus {
   padding: 10px 12px 12px;
   border-top: 1px solid var(--line);
 }
+.google-drive-setup-body .google-drive-oauth-field {
+  margin: 10px 0 12px;
+}
+.google-drive-setup-body .google-drive-oauth-field:last-child {
+  margin-bottom: 0;
+}
 .google-drive-auth-hint {
   padding: 10px 12px;
   border-radius: 8px;
