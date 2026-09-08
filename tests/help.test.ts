@@ -67,7 +67,7 @@ describe("help system", () => {
     expect(html).toContain("清空云端配置");
     expect(html).toContain("步骤 0");
     expect(html).toContain("复制重定向 URI");
-    expect(html).toContain("换浏览器后还要重新设置");
+    expect(html).toContain("扩展为什么突然从浏览器消失");
     expect(html).toContain("仅上传云端");
     expect(html).toContain("Google Drive 连接失败");
     expect(html).toContain("OAuth 客户端 ID");

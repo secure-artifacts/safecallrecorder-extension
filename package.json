@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "node build.mjs",
+    "install:local": "node scripts/install-local.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

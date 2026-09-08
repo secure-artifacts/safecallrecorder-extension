@@ -14,6 +14,28 @@ npm run build
 
 在 Chrome 打开 `chrome://extensions`，或 Edge 打开 `edge://extensions`；开启开发者模式，加载 `SafeCallRecorder.Extension/dist`。
 
+### 扩展每天消失、要重新加载？
+
+**原因：** 以前 `npm run build` 会先**删掉整个 `dist` 文件夹**。Chrome 正在加载该目录时，扩展会从列表里消失，只能重新「加载已解压的扩展程序」。
+
+**推荐做法（只需配置一次）：**
+
+```powershell
+cd SafeCallRecorder.Extension
+npm install
+npm run install:local
+```
+
+会把扩展复制到固定目录（例如 `%LOCALAPPDATA%\SafeCallRecorder\extension`）。在 `chrome://extensions` **加载该文件夹一次**，以后更新时：
+
+```powershell
+npm run install:local
+```
+
+然后在扩展页点 **刷新 ↻** 即可，**不要**再重新「加载已解压的扩展程序」（否则会换扩展 ID，Google OAuth 要重配）。
+
+日常开发仍可直接加载项目里的 `dist/`；新版 build 已改为**增量同步**，不再整目录删除，刷新扩展即可。
+
 ## 使用
 
 1. 点击扩展图标打开管理页。

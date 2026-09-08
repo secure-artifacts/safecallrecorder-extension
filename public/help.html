@@ -660,6 +660,11 @@
             <p>会。录音仍保存在插件历史（IndexedDB）中，只是停止后<strong>不会自动把 MP3 下载</strong>到浏览器下载文件夹。你仍可在历史里播放、重新导出或手动下载。启用后会自动把 MP3 上传到你选的 Drive 文件夹。</p>
           </details>
           <details>
+            <summary>扩展为什么突然从浏览器消失，要重新加载？</summary>
+            <p>若你加载的是项目里的 <code>dist</code> 文件夹，以前每次 <code>npm run build</code> 会<strong>删掉整个 dist</strong>，Chrome 会把扩展从列表里移除。新版 build 已改为增量更新，一般只需在 <code>chrome://extensions</code> 点<strong>刷新 ↻</strong>。</p>
+            <p><strong>推荐：</strong>运行 <code>npm run install:local</code>，把扩展装到固定目录（如 <code>%LOCALAPPDATA%\SafeCallRecorder\extension</code>），在扩展页<strong>只加载该文件夹一次</strong>。以后更新再运行 <code>npm run install:local</code> 并点刷新，<strong>不要</strong>重新「加载已解压的扩展程序」，否则扩展 ID 会变，Google 云端要重配。</p>
+          </details>
+          <details>
             <summary>无痕模式可以录音吗？</summary>
             <p>不建议在无痕模式录制重要内容。无痕窗口关闭后，本地录音数据可能被删除。</p>
           </details>
