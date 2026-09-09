@@ -63,7 +63,13 @@ import {
   playlistSummary,
   type LocalMediaPlaylistItem
 } from "./local-media-player";
-import { finalizeWebmDurationBlob } from "./webm-duration";
+import {
+  clearLocalMediaPrefetch,
+  prefetchLocalMediaPlaylist,
+  takePrefetchedAudioBuffer
+} from "./local-media-prefetch";
+import { preparePlayableLocalMediaBlob } from "./local-media-playable";
+import { prepareLocalVideoElement } from "./local-media-video-loader";
 import {
   buildHistoryBackupFileName,
   exportHistoryBackup,
@@ -125,10 +131,9 @@ import {
   formatGoogleAuthExpiryHint,
   isGoogleAuthExpiryWarning
 } from "./google-drive/auth-expiry";
+import { LocalMediaAudioEngine } from "./local-media-audio-engine";
 import {
   attachPlaybackRecovery,
-  isPrematureMediaEnd,
-  playMediaWithRecovery,
   resumeIfShouldPlay,
   waitForMediaReady
 } from "./playback-recovery";
@@ -194,15 +199,16 @@ let localMediaPlaybackActive = false;
 let localMediaSequentialPlay = false;
 let localMediaPlaylist: LocalMediaPlaylistItem[] = [];
 let localMediaPlaylistIndex = -1;
-let localMediaLoaded: { item: LocalMediaPlaylistItem; objectUrl: string } | undefined;
+let localMediaLoaded:
+  | { item: LocalMediaPlaylistItem; objectUrl: string; revokeMedia?: () => void }
+  | undefined;
 let localMediaDragId: string | null = null;
 let localMediaRecoveryDetach: (() => void) | undefined;
+let localMediaAudioEngine: LocalMediaAudioEngine | undefined;
 /** True while playlist playback should continue (ignore transient buffering pauses). */
 let localMediaWantsPlay = false;
 /** User explicitly paused; block auto-resume until they press play again. */
 let localMediaUserPaused = false;
-/** Ignore pause events caused by buffering until this timestamp. */
-let localMediaBufferingUntil = 0;
 /** True from「播放列表」until stop or full playlist end — keeps mic preview off. */
 let localMediaSessionActive = false;
 let localMediaLastPointerAt = 0;
@@ -214,6 +220,52 @@ function isLocalMediaSessionBusy() {
 function detachLocalMediaRecovery() {
   localMediaRecoveryDetach?.();
   localMediaRecoveryDetach = undefined;
+}
+
+function disposeLocalMediaAudioEngine() {
+  localMediaAudioEngine?.dispose();
+  localMediaAudioEngine = undefined;
+}
+
+function isLocalMediaAudioTrack(): boolean {
+  return localMediaLoaded?.item.kind === "audio";
+}
+
+function updateLocalMediaPlayingStatus() {
+  const statusEl = $("localMediaStatus");
+  const fileName = localMediaLoaded?.item.file.name || "";
+  statusEl.textContent = playlistPlayingStatus(
+    Math.max(localMediaPlaylistIndex, 0),
+    localMediaPlaylist.length,
+    fileName,
+    isLocalMediaEndedAutoStartEnabled(settings)
+  );
+  statusEl.classList.add("playing");
+}
+
+function onLocalMediaTrackPlaying() {
+  localMediaUserPaused = false;
+  localMediaWantsPlay = true;
+  localMediaPlaybackActive = true;
+  previewHadSound = false;
+  void stopPreview();
+  prefetchLocalMediaPlaylist(localMediaPlaylist, localMediaPlaylistIndex + 1, 2);
+  updateLocalMediaUi();
+  renderLocalMediaPlaylist();
+  updateLocalMediaPlayingStatus();
+}
+
+function onLocalMediaTrackError(message = "无法播放该文件，请换一个格式试试。") {
+  localMediaWantsPlay = false;
+  localMediaSessionActive = false;
+  localMediaPlaybackActive = false;
+  localMediaSequentialPlay = false;
+  detachLocalMediaRecovery();
+  void ensurePreviewMonitor();
+  updateLocalMediaUi();
+  renderLocalMediaPlaylist();
+  $("localMediaStatus").classList.remove("playing");
+  $("localMediaStatus").textContent = message;
 }
 
 async function ensurePreviewMonitor() {
@@ -409,6 +461,7 @@ function renderLocalMediaPlaylist() {
 
 function unloadCurrentLocalMediaTrack() {
   detachLocalMediaRecovery();
+  disposeLocalMediaAudioEngine();
   const video = $<HTMLVideoElement>("localMediaVideo");
   const audio = $<HTMLAudioElement>("localMediaAudio");
   video.pause();
@@ -423,10 +476,14 @@ function unloadCurrentLocalMediaTrack() {
   audio.onplay = audio.onpause = audio.onended = audio.onerror = audio.ontimeupdate = audio.onpointerdown = audio.onseeking = null;
   $("localMediaPlayerWrap").classList.add("hidden");
   if (localMediaLoaded) {
-    try {
-      URL.revokeObjectURL(localMediaLoaded.objectUrl);
-    } catch {
-      /* ignore */
+    if (localMediaLoaded.revokeMedia) {
+      localMediaLoaded.revokeMedia();
+    } else if (localMediaLoaded.objectUrl) {
+      try {
+        URL.revokeObjectURL(localMediaLoaded.objectUrl);
+      } catch {
+        /* ignore */
+      }
     }
   }
   localMediaLoaded = undefined;
@@ -435,6 +492,7 @@ function unloadCurrentLocalMediaTrack() {
 function clearLocalMediaPlaylist() {
   stopLocalMediaPlayback();
   unloadCurrentLocalMediaTrack();
+  clearLocalMediaPrefetch();
   localMediaPlaylist = [];
   localMediaPlaylistIndex = -1;
   localMediaSequentialPlay = false;
@@ -473,6 +531,7 @@ function removeLocalMediaPlaylistItem(id: string) {
   const removedIndex = localMediaPlaylist.findIndex((item) => item.id === id);
   const removingLoaded = localMediaLoaded?.item.id === id;
   localMediaPlaylist = removePlaylistItem(localMediaPlaylist, id);
+  clearLocalMediaPrefetch([id]);
   if (removingLoaded) {
     unloadCurrentLocalMediaTrack();
     localMediaPlaylistIndex = -1;
@@ -489,6 +548,9 @@ function removeLocalMediaPlaylistItem(id: string) {
 function addLocalMediaFiles(files: FileList | File[]) {
   const { playlist, added, skipped } = addFilesToPlaylist(localMediaPlaylist, [...files]);
   localMediaPlaylist = playlist;
+  if (added > 0) {
+    prefetchLocalMediaPlaylist(localMediaPlaylist, Math.max(0, localMediaPlaylist.length - added), added + 1);
+  }
   renderLocalMediaPlaylist();
   updateLocalMediaUi();
 
@@ -506,54 +568,19 @@ function markLocalMediaUserInteraction() {
   localMediaLastPointerAt = Date.now();
 }
 
-function classifyLocalMediaPause(el: HTMLMediaElement): "buffering" | "user" {
-  if (localMediaUserPaused) return "user";
-  const userInteractedRecently = Date.now() - localMediaLastPointerAt < 3000;
-  if (userInteractedRecently) return "user";
-  if (
-    localMediaWantsPlay &&
-    (el.readyState < 3 || Date.now() < localMediaBufferingUntil)
-  ) {
-    return "buffering";
-  }
-  return "user";
-}
-
-function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
+function bindLocalMediaElement(el: HTMLVideoElement) {
   detachLocalMediaRecovery();
   el.preload = "auto";
-  localMediaRecoveryDetach = attachPlaybackRecovery(el, {
-    shouldRecover: () => localMediaWantsPlay && !localMediaUserPaused,
-    onRecovering: () => {
-      if (localMediaWantsPlay) {
-        $("localMediaStatus").textContent = "播放缓冲中，正在尝试恢复…";
-      }
-    }
-  });
   el.onplay = () => {
-    localMediaUserPaused = false;
-    localMediaWantsPlay = true;
-    localMediaPlaybackActive = true;
-    previewHadSound = false;
-    void stopPreview();
-    updateLocalMediaUi();
-    renderLocalMediaPlaylist();
-    const statusEl = $("localMediaStatus");
-    const fileName = localMediaLoaded?.item.file.name || "";
-    statusEl.textContent = playlistPlayingStatus(
-      Math.max(localMediaPlaylistIndex, 0),
-      localMediaPlaylist.length,
-      fileName,
-      isLocalMediaEndedAutoStartEnabled(settings)
-    );
-    statusEl.classList.add("playing");
+    onLocalMediaTrackPlaying();
   };
   el.onpause = () => {
     if (el.ended) return;
     localMediaPlaybackActive = false;
     updateLocalMediaUi();
-    if (classifyLocalMediaPause(el) === "buffering") {
-      $("localMediaStatus").textContent = "播放缓冲中…";
+    const userInteractedRecently = Date.now() - localMediaLastPointerAt < 3000;
+    if (localMediaWantsPlay && !localMediaUserPaused && !userInteractedRecently) {
+      void el.play().catch(() => undefined);
       return;
     }
     localMediaUserPaused = true;
@@ -562,36 +589,16 @@ function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
     $("localMediaStatus").textContent = "播放已暂停。";
   };
   el.onended = () => {
-    if (isPrematureMediaEnd(el)) {
-      localMediaWantsPlay = true;
-      void el.play().catch(() => undefined);
-      return;
-    }
     localMediaWantsPlay = false;
     void handleLocalMediaEnded();
   };
   el.onerror = () => {
-    localMediaWantsPlay = false;
-    localMediaSessionActive = false;
-    localMediaPlaybackActive = false;
-    localMediaSequentialPlay = false;
-    detachLocalMediaRecovery();
-    void ensurePreviewMonitor();
-    updateLocalMediaUi();
-    renderLocalMediaPlaylist();
-    $("localMediaStatus").classList.remove("playing");
-    $("localMediaStatus").textContent = "无法播放该文件，请换一个格式试试。";
+    onLocalMediaTrackError();
   };
   el.onpointerdown = () => markLocalMediaUserInteraction();
   el.onclick = () => markLocalMediaUserInteraction();
   el.onkeydown = (e) => {
     if (e.code === "Space" || e.code === "Enter") markLocalMediaUserInteraction();
-  };
-  el.onwaiting = () => {
-    localMediaBufferingUntil = Date.now() + 4000;
-    if (localMediaWantsPlay && !localMediaUserPaused) {
-      $("localMediaStatus").textContent = "播放缓冲中…";
-    }
   };
   el.onseeking = () => {
     if (localMediaWantsPlay) $("localMediaStatus").textContent = "正在跳转…";
@@ -600,59 +607,93 @@ function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
     if (el.paused || el.ended) return;
     if (!localMediaWantsPlay) return;
     localMediaPlaybackActive = true;
-    $("localMediaStatus").classList.add("playing");
-    const fileName = localMediaLoaded?.item.file.name || "";
-    $("localMediaStatus").textContent = playlistPlayingStatus(
-      Math.max(localMediaPlaylistIndex, 0),
-      localMediaPlaylist.length,
-      fileName,
-      isLocalMediaEndedAutoStartEnabled(settings)
-    );
+    updateLocalMediaPlayingStatus();
   };
+}
+
+function createLocalMediaAudioEngine() {
+  disposeLocalMediaAudioEngine();
+  localMediaAudioEngine = new LocalMediaAudioEngine({
+    onPlaying: () => onLocalMediaTrackPlaying(),
+    onEnded: () => {
+      localMediaWantsPlay = false;
+      void handleLocalMediaEnded();
+    },
+    onError: (message) => onLocalMediaTrackError(message)
+  });
+  return localMediaAudioEngine;
 }
 
 async function loadLocalMediaTrack(index: number) {
   const item = localMediaPlaylist[index];
   if (!item) return;
   unloadCurrentLocalMediaTrack();
-
-  let playable: Blob = item.file;
-  if (/webm/i.test(item.file.type) || /\.webm$/i.test(item.file.name)) {
-    try {
-      playable = await finalizeWebmDurationBlob(item.file, 0);
-    } catch {
-      playable = item.file;
-    }
-  }
-
-  const objectUrl = URL.createObjectURL(playable);
-  localMediaLoaded = { item, objectUrl };
   localMediaPlaylistIndex = index;
 
   const video = $<HTMLVideoElement>("localMediaVideo");
   const audio = $<HTMLAudioElement>("localMediaAudio");
-  const target = item.kind === "video" ? video : audio;
-  const other = item.kind === "video" ? audio : video;
-  other.classList.add("hidden");
-  other.removeAttribute("src");
-  target.classList.remove("hidden");
-  target.src = objectUrl;
-  bindLocalMediaElement(target);
+  audio.classList.add("hidden");
+  audio.removeAttribute("src");
+
+  if (item.kind === "audio") {
+    video.classList.add("hidden");
+    video.removeAttribute("src");
+    $("localMediaPlayerWrap").classList.add("hidden");
+    $("localMediaStatus").textContent = "正在预加载音频…";
+    renderLocalMediaPlaylist();
+    updateLocalMediaUi();
+    localMediaLoaded = { item, objectUrl: "" };
+    const engine = createLocalMediaAudioEngine();
+    try {
+      const prefetched = await takePrefetchedAudioBuffer(item.id);
+      if (prefetched) {
+        await engine.loadBuffer(prefetched);
+      } else {
+        const playable = await preparePlayableLocalMediaBlob(item.file);
+        await engine.load(playable);
+      }
+      prefetchLocalMediaPlaylist(localMediaPlaylist, index + 1, 2);
+      $("localMediaStatus").textContent = playlistReadyStatus(
+        localMediaPlaylist.length,
+        isLocalMediaEndedAutoStartEnabled(settings)
+      );
+    } catch (e) {
+      onLocalMediaTrackError(friendlyError(e instanceof Error ? e.message : String(e)));
+    }
+    return;
+  }
+
+  video.classList.remove("hidden");
   $("localMediaPlayerWrap").classList.remove("hidden");
+  $("localMediaStatus").textContent = "正在预加载视频…";
   renderLocalMediaPlaylist();
   updateLocalMediaUi();
+  try {
+    const playable = await preparePlayableLocalMediaBlob(item.file);
+    const prepared = await prepareLocalVideoElement(video, playable, item.file.name);
+    localMediaLoaded = { item, objectUrl: prepared.objectUrl, revokeMedia: prepared.revoke };
+    bindLocalMediaElement(video);
+    $("localMediaStatus").textContent = playlistReadyStatus(
+      localMediaPlaylist.length,
+      isLocalMediaEndedAutoStartEnabled(settings)
+    );
+  } catch (e) {
+    onLocalMediaTrackError(friendlyError(e instanceof Error ? e.message : String(e)));
+  }
 }
 
 async function playCurrentLocalMediaTrack() {
   if (!localMediaLoaded || busy) return;
-  const el =
-    localMediaLoaded.item.kind === "video"
-      ? $<HTMLVideoElement>("localMediaVideo")
-      : $<HTMLAudioElement>("localMediaAudio");
   localMediaUserPaused = false;
   localMediaWantsPlay = true;
   localMediaPlaybackActive = true;
-  await playMediaWithRecovery(el);
+  if (isLocalMediaAudioTrack()) {
+    if (!localMediaAudioEngine?.hasBuffer) throw new Error("音频尚未加载完成");
+    await localMediaAudioEngine.play();
+    return;
+  }
+  const el = $<HTMLVideoElement>("localMediaVideo");
+  await el.play();
 }
 
 async function handleLocalMediaEnded() {
@@ -673,11 +714,6 @@ async function handleLocalMediaEnded() {
     statusEl.textContent = `即将播放下一项（${nextIndex + 1}/${localMediaPlaylist.length}）…`;
     try {
       await loadLocalMediaTrack(nextIndex);
-      await waitForMediaReady(
-        localMediaLoaded!.item.kind === "video"
-          ? $<HTMLVideoElement>("localMediaVideo")
-          : $<HTMLAudioElement>("localMediaAudio")
-      ).catch(() => undefined);
       await playCurrentLocalMediaTrack();
     } catch (e) {
       localMediaSequentialPlay = false;
@@ -741,18 +777,18 @@ async function playLocalMediaPlaylist() {
 function stopLocalMediaPlayback() {
   localMediaWantsPlay = false;
   localMediaUserPaused = false;
-  localMediaBufferingUntil = 0;
   localMediaSessionActive = false;
   if (localMediaLoaded) {
-    const el =
-      localMediaLoaded.item.kind === "video"
-        ? $<HTMLVideoElement>("localMediaVideo")
-        : $<HTMLAudioElement>("localMediaAudio");
-    el.pause();
-    try {
-      el.currentTime = 0;
-    } catch {
-      /* ignore */
+    if (isLocalMediaAudioTrack()) {
+      localMediaAudioEngine?.stop();
+    } else {
+      const el = $<HTMLVideoElement>("localMediaVideo");
+      el.pause();
+      try {
+        el.currentTime = 0;
+      } catch {
+        /* ignore */
+      }
     }
   }
   localMediaPlaybackActive = false;
@@ -1095,12 +1131,14 @@ function stopPlaybackIfSession(sessionId?: string) {
 
 async function resumeDashboardPlayback() {
   if (localMediaWantsPlay && !localMediaUserPaused && localMediaLoaded) {
-    const el =
-      localMediaLoaded.item.kind === "video"
-        ? $<HTMLVideoElement>("localMediaVideo")
-        : $<HTMLAudioElement>("localMediaAudio");
-    await resumeIfShouldPlay(el);
-    if (!el.paused) localMediaPlaybackActive = true;
+    if (isLocalMediaAudioTrack()) {
+      await localMediaAudioEngine?.resumeIfShouldPlay(localMediaWantsPlay, localMediaUserPaused);
+      if (localMediaAudioEngine?.isPlaying) localMediaPlaybackActive = true;
+    } else {
+      const el = $<HTMLVideoElement>("localMediaVideo");
+      await resumeIfShouldPlay(el);
+      if (!el.paused) localMediaPlaybackActive = true;
+    }
   }
   if (playingAudio) {
     await resumeIfShouldPlay(playingAudio.audio);

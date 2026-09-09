@@ -82,6 +82,10 @@ describe("local media player", () => {
     expect(dash).toContain("deferHistorySync");
     expect(dash).toContain("localMediaSessionActive");
     expect(dash).toContain("reorderLocalMediaPlaylistItem");
+    expect(dash).toContain("LocalMediaAudioEngine");
+    expect(dash).toContain("正在预加载音频");
+    expect(dash).toContain("正在预加载视频");
+    expect(dash).toContain("prefetchLocalMediaPlaylist");
     expect(DEFAULT_SETTINGS.autoStartOnLocalMediaEnded).toBe(true);
   });
 });

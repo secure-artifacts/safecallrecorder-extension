@@ -11,6 +11,52 @@ export type PlaybackRecoveryOptions = {
 const HAVE_FUTURE_DATA = 3;
 const HAVE_ENOUGH_DATA = 4;
 
+function isFullyBuffered(el: HTMLMediaElement): boolean {
+  const dur = el.duration;
+  if (!Number.isFinite(dur) || dur <= 0) return false;
+  if (el.readyState < HAVE_ENOUGH_DATA) return false;
+  const ranges = el.buffered;
+  for (let i = 0; i < ranges.length; i++) {
+    if (ranges.start(i) <= 0.25 && ranges.end(i) >= dur - 0.35) return true;
+  }
+  return false;
+}
+
+/** Wait until the whole local file is buffered (not streaming). */
+export function waitForFullMediaBuffered(el: HTMLMediaElement, timeoutMs = 120_000): Promise<void> {
+  if (isFullyBuffered(el)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      el.removeEventListener("progress", onProgress);
+      el.removeEventListener("canplaythrough", onProgress);
+      el.removeEventListener("loadeddata", onProgress);
+      el.removeEventListener("error", onError);
+      fn();
+    };
+    const onProgress = () => {
+      if (isFullyBuffered(el)) finish(resolve);
+    };
+    const onError = () => finish(() => reject(new Error("无法预加载媒体")));
+    const timer = setTimeout(() => finish(() => reject(new Error("媒体预加载超时"))), timeoutMs);
+    el.addEventListener("progress", onProgress);
+    el.addEventListener("canplaythrough", onProgress);
+    el.addEventListener("loadeddata", onProgress);
+    el.addEventListener("error", onError, { once: true });
+    if (el.readyState === 0 && el.src) {
+      try {
+        el.load();
+      } catch {
+        /* ignore */
+      }
+    }
+    onProgress();
+  });
+}
+
 export function isPrematureMediaEnd(el: HTMLMediaElement): boolean {
   const dur = el.duration;
   return Number.isFinite(dur) && dur > 0.5 && el.currentTime < dur - 0.75;
@@ -46,7 +92,7 @@ export function waitForMediaReady(el: HTMLMediaElement, timeoutMs = 30_000): Pro
 }
 
 export async function playMediaWithRecovery(el: HTMLMediaElement): Promise<void> {
-  await waitForMediaReady(el).catch(() => undefined);
+  await waitForFullMediaBuffered(el).catch(() => waitForMediaReady(el).catch(() => undefined));
   await el.play();
 }
 

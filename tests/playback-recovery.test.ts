@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { attachPlaybackRecovery, isPrematureMediaEnd, waitForMediaReady } from "../src/playback-recovery";
+import {
+  attachPlaybackRecovery,
+  isPrematureMediaEnd,
+  waitForFullMediaBuffered,
+  waitForMediaReady
+} from "../src/playback-recovery";
 
 describe("playback recovery", () => {
   it("waitForMediaReady resolves when canplaythrough fires", async () => {
@@ -14,6 +19,23 @@ describe("playback recovery", () => {
     } as unknown as HTMLMediaElement;
     await waitForMediaReady(el, 1000);
     expect(el.load).toHaveBeenCalled();
+  });
+
+  it("waitForFullMediaBuffered resolves when entire duration is buffered", async () => {
+    const el = {
+      readyState: 4,
+      duration: 10,
+      src: "blob:test",
+      buffered: {
+        length: 1,
+        start: () => 0,
+        end: () => 10
+      },
+      load: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    } as unknown as HTMLMediaElement;
+    await waitForFullMediaBuffered(el, 1000);
   });
 
   it("detects premature ended events", () => {

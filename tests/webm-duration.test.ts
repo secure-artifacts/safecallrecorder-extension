@@ -72,6 +72,8 @@ describe("original export writes seekable WebM", () => {
 
   it("local player patches WebM so the progress bar has a duration", () => {
     const dash = readFileSync(new URL("../src/dashboard.ts", import.meta.url), "utf8");
-    expect(dash).toContain("finalizeWebmDurationBlob");
+    const playable = readFileSync(new URL("../src/local-media-playable.ts", import.meta.url), "utf8");
+    expect(dash).toContain("preparePlayableLocalMediaBlob");
+    expect(playable).toContain("finalizeWebmDurationBlob");
   });
 });
