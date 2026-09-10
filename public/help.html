@@ -38,7 +38,8 @@
         <a href="#history">14. 录音历史</a>
         <a href="#recovery">15. 崩溃或停电</a>
         <a href="#faq">16. 常见问题</a>
-        <a href="#privacy">17. 隐私说明</a>
+        <a href="#desktop">17. Windows 桌面版</a>
+        <a href="#privacy">18. 隐私说明</a>
       </nav>
 
       <main class="help-main">
@@ -670,6 +671,37 @@
           </details>
         </section>
 
+        <section class="help-card" id="desktop">
+          <h2>Windows 桌面版（SafeCallRecorder Desktop）</h2>
+          <p class="help-lead">除浏览器插件外，还提供 Windows 桌面程序，适合需要<strong>多窗口同时录音</strong>、<strong>系统托盘后台运行</strong>、<strong>FFmpeg 波形编辑器</strong>的用户。</p>
+          <div class="callout ok">
+            桌面版与插件共用 <strong>「导出/导入全部设置」</strong> JSON（<code>SafeCallRecorderSettings</code> v1）。在任一端导出，另一端导入即可同步命名方案、比特率、Google 文件夹 ID、OAuth 会话等。
+          </div>
+          <h3>桌面版独有功能</h3>
+          <ul>
+            <li><strong>多预设窗口</strong>：可同时打开多个独立录制窗口（例如「会议」「电话」各一个）。</li>
+            <li><strong>60 秒安全缓存</strong>：录音过程中定时写入缓存，降低崩溃丢音风险。</li>
+            <li><strong>录音历史</strong>：导出 MP3、继续录音、打开编辑器。</li>
+            <li><strong>音频编辑器</strong>：波形选区剪切/复制/粘贴、撤销重做、静音剪除。</li>
+            <li><strong>系统集成</strong>：开机自启、系统托盘、音频文件右键「使用 SafeCallRecorder 编辑/上传」。</li>
+          </ul>
+          <h3>插件有、桌面版暂无</h3>
+          <ul>
+            <li>浏览器内<strong>本地媒体播放列表</strong>与标签页自动开始录音。</li>
+            <li>Chrome 下载目录句柄（桌面版直接保存到本机 <code>data/recordings</code>）。</li>
+          </ul>
+          <h3>如何启动</h3>
+          <pre><code>cd SafeCallRecorder.Desktop
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python main.py</code></pre>
+          <p>打包为单文件 exe：<code>powershell -File scripts\build.ps1</code>，输出 <code>dist\SafeCallRecorderDesktop.exe</code>。</p>
+          <div class="callout warn">
+            Google Drive 在桌面版使用 OAuth <strong>桌面客户端</strong> JSON（<code>credentials/client_secret.json</code>），与插件的 Web 应用 Client ID 类型不同；设置备份中的文件夹 ID 与登录状态仍可导入复用。
+          </div>
+        </section>
+
         <section class="help-card" id="privacy">
           <h2>录音是否会上传？</h2>
           <div class="callout ok">
@@ -703,7 +735,7 @@
           </div>
         </section>
 
-        <p class="help-footer" id="helpVersion">使用说明版本：1.4.6</p>
+        <p class="help-footer" id="helpVersion">使用说明版本：1.4.65</p>
       </main>
     </div>
   </div>
