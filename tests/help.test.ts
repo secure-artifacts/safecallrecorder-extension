@@ -106,7 +106,7 @@ describe("help system", () => {
   });
 
   it("exports help content version", () => {
-    expect(HELP_CONTENT_VERSION).toBe("1.4.6");
+    expect(HELP_CONTENT_VERSION).toBe("1.4.65");
   });
 
   it("manifest includes Drive API host permission only for googleapis", () => {
