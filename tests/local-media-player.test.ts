@@ -106,7 +106,8 @@ describe("local media player", () => {
     expect(html).toContain('id="localMediaSeek"');
     expect(html).toContain('id="localMediaPauseBtn"');
     expect(html).toContain('id="localMediaResumeBtn"');
-    expect(dash).toContain("seekLocalMediaAudio");
+    expect(dash).toContain("seekLocalMediaTrack");
+    expect(dash).toContain("isLocalMediaVideoTrack");
     expect(dash).toContain("pauseLocalMediaPlayback");
     expect(dash).toContain("resumeLocalMediaPlayback");
     expect(dash).toContain("startLocalMediaWaveformMonitor");

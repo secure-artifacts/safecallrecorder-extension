@@ -303,31 +303,58 @@ function isLocalMediaAudioTrack(): boolean {
   return localMediaLoaded?.item.kind === "audio";
 }
 
+function isLocalMediaVideoTrack(): boolean {
+  return localMediaLoaded?.item.kind === "video";
+}
+
+function hasLocalMediaTransport(): boolean {
+  return isLocalMediaAudioTrack() || isLocalMediaVideoTrack();
+}
+
 function stopLocalMediaProgressTimer() {
   if (!localMediaProgressTimer) return;
   clearInterval(localMediaProgressTimer);
   localMediaProgressTimer = undefined;
 }
 
-function getLocalMediaAudioDuration(): number {
-  if (!localMediaLoaded || !isLocalMediaAudioTrack()) return 0;
-  if (localMediaLoaded.audioViaEngine && localMediaAudioEngine) return localMediaAudioEngine.duration;
-  const dur = $<HTMLAudioElement>("localMediaAudio").duration;
-  return Number.isFinite(dur) && dur > 0 ? dur : 0;
+function getLocalMediaDuration(): number {
+  if (!localMediaLoaded) return 0;
+  if (isLocalMediaAudioTrack()) {
+    if (localMediaLoaded.audioViaEngine && localMediaAudioEngine) return localMediaAudioEngine.duration;
+    const dur = $<HTMLAudioElement>("localMediaAudio").duration;
+    return Number.isFinite(dur) && dur > 0 ? dur : 0;
+  }
+  if (isLocalMediaVideoTrack()) {
+    const dur = $<HTMLVideoElement>("localMediaVideo").duration;
+    return Number.isFinite(dur) && dur > 0 ? dur : 0;
+  }
+  return 0;
 }
 
-function getLocalMediaAudioCurrentTime(): number {
-  if (!localMediaLoaded || !isLocalMediaAudioTrack()) return 0;
-  if (localMediaLoaded.audioViaEngine && localMediaAudioEngine) return localMediaAudioEngine.getCurrentTime();
-  return $<HTMLAudioElement>("localMediaAudio").currentTime;
+function getLocalMediaCurrentTime(): number {
+  if (!localMediaLoaded) return 0;
+  if (isLocalMediaAudioTrack()) {
+    if (localMediaLoaded.audioViaEngine && localMediaAudioEngine) return localMediaAudioEngine.getCurrentTime();
+    return $<HTMLAudioElement>("localMediaAudio").currentTime;
+  }
+  if (isLocalMediaVideoTrack()) {
+    return $<HTMLVideoElement>("localMediaVideo").currentTime;
+  }
+  return 0;
 }
 
-function isLocalMediaAudioPlayingNow(): boolean {
-  if (!localMediaLoaded || !isLocalMediaAudioTrack()) return false;
-  if (localMediaUserPaused) return false;
-  if (localMediaLoaded.audioViaEngine) return !!localMediaAudioEngine?.isPlaying;
-  const audio = $<HTMLAudioElement>("localMediaAudio");
-  return !audio.paused && !audio.ended;
+function isLocalMediaPlayingNow(): boolean {
+  if (!localMediaLoaded || localMediaUserPaused) return false;
+  if (isLocalMediaAudioTrack()) {
+    if (localMediaLoaded.audioViaEngine) return !!localMediaAudioEngine?.isPlaying;
+    const audio = $<HTMLAudioElement>("localMediaAudio");
+    return !audio.paused && !audio.ended;
+  }
+  if (isLocalMediaVideoTrack()) {
+    const video = $<HTMLVideoElement>("localMediaVideo");
+    return !video.paused && !video.ended;
+  }
+  return false;
 }
 
 function updateLocalMediaSeekInput(currentSec: number, durationSec: number) {
@@ -344,7 +371,7 @@ function updateLocalMediaSeekInput(currentSec: number, durationSec: number) {
   seek.disabled = true;
 }
 
-function updateLocalMediaAudioProgressUi(currentSec: number, durationSec: number) {
+function updateLocalMediaProgressUi(currentSec: number, durationSec: number) {
   const label = $("localMediaAudioProgressLabel");
   const dur = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 0;
   const cur = Math.max(0, dur > 0 ? Math.min(currentSec, dur) : currentSec);
@@ -360,16 +387,16 @@ function updateLocalMediaTransportUi() {
   const wrap = $<HTMLElement>("localMediaTransportWrap");
   const pauseBtn = $<HTMLButtonElement>("localMediaPauseBtn");
   const resumeBtn = $<HTMLButtonElement>("localMediaResumeBtn");
-  const show = !!localMediaLoaded && isLocalMediaAudioTrack();
+  const show = !!localMediaLoaded && hasLocalMediaTransport();
   wrap.classList.toggle("hidden", !show);
   if (!show) return;
-  const playing = isLocalMediaAudioPlayingNow();
-  const paused = localMediaUserPaused || (!playing && getLocalMediaAudioCurrentTime() > 0);
+  const playing = isLocalMediaPlayingNow();
+  const paused = localMediaUserPaused || (!playing && getLocalMediaCurrentTime() > 0);
   pauseBtn.classList.toggle("hidden", !playing);
   resumeBtn.classList.toggle("hidden", !paused || playing);
   pauseBtn.disabled = busy || !playing;
   resumeBtn.disabled = busy || playing;
-  updateLocalMediaSeekInput(getLocalMediaAudioCurrentTime(), getLocalMediaAudioDuration());
+  updateLocalMediaSeekInput(getLocalMediaCurrentTime(), getLocalMediaDuration());
 }
 
 function showLocalMediaTransportUi() {
@@ -386,17 +413,34 @@ function hideLocalMediaTransportUi() {
   $("localMediaAudioProgressLabel").textContent = "00:00 / 00:00";
 }
 
-async function seekLocalMediaAudio(seconds: number, resumeAfterSeek: boolean) {
-  if (!localMediaLoaded || !isLocalMediaAudioTrack() || busy) return;
-  const dur = getLocalMediaAudioDuration();
+async function seekLocalMediaTrack(seconds: number, resumeAfterSeek: boolean) {
+  if (!localMediaLoaded || !hasLocalMediaTransport() || busy) return;
+  const dur = getLocalMediaDuration();
   const t = dur > 0 ? Math.max(0, Math.min(seconds, dur)) : Math.max(0, seconds);
+  if (isLocalMediaVideoTrack()) {
+    const video = $<HTMLVideoElement>("localMediaVideo");
+    video.currentTime = t;
+    if (resumeAfterSeek) {
+      localMediaUserPaused = false;
+      localMediaWantsPlay = true;
+      await video.play();
+      localMediaPlaybackActive = true;
+      startLocalMediaProgressPolling();
+      startLocalMediaWaveformMonitor();
+      updateLocalMediaPlayingStatus();
+    }
+    updateLocalMediaProgressUi(getLocalMediaCurrentTime(), dur);
+    updateLocalMediaTransportUi();
+    return;
+  }
+  if (!isLocalMediaAudioTrack()) return;
   if (localMediaLoaded.audioViaEngine && localMediaAudioEngine) {
     if (resumeAfterSeek || localMediaAudioEngine.isPlaying) {
       await localMediaAudioEngine.seekAndResume(t);
       localMediaUserPaused = false;
       localMediaWantsPlay = true;
       localMediaPlaybackActive = true;
-      startLocalMediaAudioProgressPolling();
+      startLocalMediaProgressPolling();
       startLocalMediaWaveformMonitor();
       updateLocalMediaPlayingStatus();
     } else {
@@ -410,21 +454,23 @@ async function seekLocalMediaAudio(seconds: number, resumeAfterSeek: boolean) {
       localMediaWantsPlay = true;
       await audio.play();
       localMediaPlaybackActive = true;
-      startLocalMediaAudioProgressPolling();
+      startLocalMediaProgressPolling();
       startLocalMediaWaveformMonitor();
       updateLocalMediaPlayingStatus();
     }
   }
-  updateLocalMediaAudioProgressUi(getLocalMediaAudioCurrentTime(), dur);
+  updateLocalMediaProgressUi(getLocalMediaCurrentTime(), dur);
   updateLocalMediaTransportUi();
 }
 
 async function pauseLocalMediaPlayback() {
-  if (!localMediaLoaded || !isLocalMediaAudioTrack() || busy) return;
+  if (!localMediaLoaded || !hasLocalMediaTransport() || busy) return;
   localMediaUserPaused = true;
   localMediaWantsPlay = false;
   localMediaPlaybackActive = false;
-  if (localMediaLoaded.audioViaEngine) {
+  if (isLocalMediaVideoTrack()) {
+    $<HTMLVideoElement>("localMediaVideo").pause();
+  } else if (localMediaLoaded.audioViaEngine) {
     localMediaAudioEngine?.pause();
   } else {
     $<HTMLAudioElement>("localMediaAudio").pause();
@@ -438,11 +484,13 @@ async function pauseLocalMediaPlayback() {
 }
 
 async function resumeLocalMediaPlayback() {
-  if (!localMediaLoaded || !isLocalMediaAudioTrack() || busy) return;
+  if (!localMediaLoaded || !hasLocalMediaTransport() || busy) return;
   localMediaUserPaused = false;
   localMediaWantsPlay = true;
   localMediaPlaybackActive = true;
-  if (localMediaLoaded.audioViaEngine) {
+  if (isLocalMediaVideoTrack()) {
+    await $<HTMLVideoElement>("localMediaVideo").play();
+  } else if (localMediaLoaded.audioViaEngine) {
     await localMediaAudioEngine?.play();
   } else {
     await $<HTMLAudioElement>("localMediaAudio").play();
@@ -450,21 +498,28 @@ async function resumeLocalMediaPlayback() {
   onLocalMediaTrackPlaying();
 }
 
-function refreshLocalMediaAudioProgressUi() {
-  if (!localMediaLoaded || !isLocalMediaAudioTrack()) return;
-  if (localMediaLoaded.audioViaEngine && localMediaAudioEngine) {
-    updateLocalMediaAudioProgressUi(localMediaAudioEngine.getCurrentTime(), localMediaAudioEngine.duration);
+function refreshLocalMediaProgressUi() {
+  if (!localMediaLoaded || !hasLocalMediaTransport()) return;
+  if (isLocalMediaAudioTrack() && localMediaLoaded.audioViaEngine && localMediaAudioEngine) {
+    updateLocalMediaProgressUi(localMediaAudioEngine.getCurrentTime(), localMediaAudioEngine.duration);
     return;
   }
-  const audio = $<HTMLAudioElement>("localMediaAudio");
-  updateLocalMediaAudioProgressUi(audio.currentTime, audio.duration);
+  if (isLocalMediaAudioTrack()) {
+    const audio = $<HTMLAudioElement>("localMediaAudio");
+    updateLocalMediaProgressUi(audio.currentTime, audio.duration);
+    return;
+  }
+  if (isLocalMediaVideoTrack()) {
+    const video = $<HTMLVideoElement>("localMediaVideo");
+    updateLocalMediaProgressUi(video.currentTime, video.duration);
+  }
 }
 
-function startLocalMediaAudioProgressPolling() {
-  if (!isLocalMediaAudioTrack()) return;
+function startLocalMediaProgressPolling() {
+  if (!hasLocalMediaTransport()) return;
   stopLocalMediaProgressTimer();
-  refreshLocalMediaAudioProgressUi();
-  localMediaProgressTimer = setInterval(() => refreshLocalMediaAudioProgressUi(), 250);
+  refreshLocalMediaProgressUi();
+  localMediaProgressTimer = setInterval(() => refreshLocalMediaProgressUi(), 250);
 }
 
 function stopLocalMediaWaveformMonitor() {
@@ -522,7 +577,7 @@ function onLocalMediaTrackPlaying() {
   updateLocalMediaUi();
   renderLocalMediaPlaylist();
   updateLocalMediaPlayingStatus();
-  if (isLocalMediaAudioTrack()) startLocalMediaAudioProgressPolling();
+  if (hasLocalMediaTransport()) startLocalMediaProgressPolling();
   startLocalMediaWaveformMonitor();
 }
 
@@ -655,8 +710,8 @@ function updateLocalMediaUi() {
   const stopBtn = $<HTMLButtonElement>("localMediaStopBtn");
   const clearBtn = $<HTMLButtonElement>("localMediaClearPlaylistBtn");
   const hasPlaylist = localMediaPlaylist.length > 0;
-  const audioPlaying = isLocalMediaAudioPlayingNow();
-  playBtn.disabled = busy || !hasPlaylist || audioPlaying || isLocalMediaPlayStartBlockedByDecode();
+  const mediaPlaying = isLocalMediaPlayingNow();
+  playBtn.disabled = busy || !hasPlaylist || mediaPlaying || isLocalMediaPlayStartBlockedByDecode();
   stopBtn.disabled = busy || !hasPlaylist;
   stopBtn.classList.toggle("hidden", !hasPlaylist);
   clearBtn.disabled = busy || !hasPlaylist;
@@ -910,17 +965,18 @@ function bindLocalMediaElement(el: HTMLVideoElement | HTMLAudioElement) {
     localMediaPlaybackActive = true;
     updateLocalMediaPlayingStatus();
     if (el instanceof HTMLAudioElement && isLocalMediaAudioTrack() && !localMediaLoaded?.audioViaEngine) {
-      updateLocalMediaAudioProgressUi(el.currentTime, el.duration);
+      updateLocalMediaProgressUi(el.currentTime, el.duration);
+    } else if (el instanceof HTMLVideoElement && isLocalMediaVideoTrack()) {
+      updateLocalMediaProgressUi(el.currentTime, el.duration);
     }
   };
-  if (el instanceof HTMLAudioElement) {
-    const syncAudioDuration = () => {
-      if (!isLocalMediaAudioTrack()) return;
-      updateLocalMediaAudioProgressUi(el.currentTime, el.duration);
-    };
-    el.onloadedmetadata = syncAudioDuration;
-    el.ondurationchange = syncAudioDuration;
-  }
+  const syncMediaDuration = () => {
+    if (el instanceof HTMLAudioElement && !isLocalMediaAudioTrack()) return;
+    if (el instanceof HTMLVideoElement && !isLocalMediaVideoTrack()) return;
+    updateLocalMediaProgressUi(el.currentTime, el.duration);
+  };
+  el.onloadedmetadata = syncMediaDuration;
+  el.ondurationchange = syncMediaDuration;
 }
 
 function createLocalMediaAudioEngine() {
@@ -961,11 +1017,9 @@ function loadLocalMediaTrackMedia(item: LocalMediaPlaylistItem, video: HTMLVideo
     bindLocalMediaElement(audio);
     prefetchLocalMediaAudio(item);
     showLocalMediaTransportUi();
-    updateLocalMediaAudioProgressUi(0, 0);
+    updateLocalMediaProgressUi(0, 0);
     return;
   }
-
-  hideLocalMediaTransportUi();
 
   audio.classList.add("hidden");
   audio.removeAttribute("src");
@@ -973,6 +1027,8 @@ function loadLocalMediaTrackMedia(item: LocalMediaPlaylistItem, video: HTMLVideo
   video.preload = "auto";
   video.src = objectUrl;
   bindLocalMediaElement(video);
+  showLocalMediaTransportUi();
+  updateLocalMediaProgressUi(0, 0);
   if (isLocalMediaWaitForDecodeEnabled(settings)) {
     prefetchLocalMediaVideo(item);
   }
@@ -3581,18 +3637,18 @@ $("localMediaResumeBtn").onclick = () => void resumeLocalMediaPlayback();
 const localMediaSeekEl = $<HTMLInputElement>("localMediaSeek");
 localMediaSeekEl.addEventListener("pointerdown", () => {
   localMediaSeekDragging = true;
-  localMediaWasPlayingBeforeSeek = isLocalMediaAudioPlayingNow();
+  localMediaWasPlayingBeforeSeek = isLocalMediaPlayingNow();
 });
 localMediaSeekEl.addEventListener("input", () => {
-  const dur = getLocalMediaAudioDuration();
+  const dur = getLocalMediaDuration();
   if (dur <= 0) return;
-  updateLocalMediaAudioProgressUi(Number(localMediaSeekEl.value) / 1000, dur);
+  updateLocalMediaProgressUi(Number(localMediaSeekEl.value) / 1000, dur);
 });
 localMediaSeekEl.addEventListener("change", () => {
   localMediaSeekDragging = false;
-  const dur = getLocalMediaAudioDuration();
+  const dur = getLocalMediaDuration();
   if (dur <= 0) return;
-  void seekLocalMediaAudio(Number(localMediaSeekEl.value) / 1000, localMediaWasPlayingBeforeSeek);
+  void seekLocalMediaTrack(Number(localMediaSeekEl.value) / 1000, localMediaWasPlayingBeforeSeek);
 });
 $("localMediaPlaylist").addEventListener("dragstart", (e) => {
   if (localMediaPlaybackActive || recording || busy) {
