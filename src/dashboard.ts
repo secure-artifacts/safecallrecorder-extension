@@ -68,15 +68,21 @@ import {
 } from "./local-media-player";
 import {
   clearLocalMediaPrefetch,
-  getLocalMediaAudioDecodeStatus,
+  getLocalMediaDecodeStatus,
   getReadyPrefetchedAudioBuffer,
+  isLocalMediaItemPrefetched,
+  prefetchAllLocalMedia,
   prefetchAllLocalMediaAudio,
   prefetchLocalMediaAudio,
   prefetchLocalMediaPlaylist,
+  prefetchLocalMediaVideo,
   takePrefetchedAudioBuffer,
+  takePrefetchedVideo,
   tryReadyAudioBuffer,
-  waitForPrefetchedAudioBuffer
+  waitForPrefetchedAudioBuffer,
+  waitForPrefetchedVideo
 } from "./local-media-prefetch";
+import type { LocalVideoPrepareResult } from "./local-media-video-loader";
 import { LocalMediaAudioEngine } from "./local-media-audio-engine";
 import {
   buildHistoryBackupFileName,
@@ -235,8 +241,8 @@ function resolveLocalMediaPlayStartIndex(): number {
 function isLocalMediaPlayStartBlockedByDecode(): boolean {
   if (!isLocalMediaWaitForDecodeEnabled(settings)) return false;
   const item = localMediaPlaylist[resolveLocalMediaPlayStartIndex()];
-  if (!item || item.kind !== "audio") return false;
-  return !getReadyPrefetchedAudioBuffer(item.id);
+  if (!item) return false;
+  return !isLocalMediaItemPrefetched(item);
 }
 
 function stopLocalMediaDecodeStatusPolling() {
@@ -247,10 +253,10 @@ function stopLocalMediaDecodeStatusPolling() {
 
 function refreshLocalMediaDecodeStatusUi() {
   if (!isLocalMediaWaitForDecodeEnabled(settings) || localMediaPlaybackActive) return;
-  const { audioCount, readyCount } = getLocalMediaAudioDecodeStatus(localMediaPlaylist);
-  if (audioCount === 0) return;
-  if (readyCount < audioCount) {
-    $("localMediaStatus").textContent = `正在后台解码音频（${readyCount}/${audioCount}），完成后可播放。`;
+  const { mediaCount, readyCount } = getLocalMediaDecodeStatus(localMediaPlaylist);
+  if (mediaCount === 0) return;
+  if (readyCount < mediaCount) {
+    $("localMediaStatus").textContent = `正在后台预加载媒体（${readyCount}/${mediaCount}），完成后可播放。`;
   } else {
     $("localMediaStatus").textContent = playlistReadyStatus(
       localMediaPlaylist.length,
@@ -263,16 +269,16 @@ function refreshLocalMediaDecodeStatusUi() {
 function syncLocalMediaDecodeStatusPolling() {
   stopLocalMediaDecodeStatusPolling();
   if (!isLocalMediaWaitForDecodeEnabled(settings)) return;
-  const { audioCount, readyCount } = getLocalMediaAudioDecodeStatus(localMediaPlaylist);
-  if (audioCount === 0 || readyCount >= audioCount) {
+  const { mediaCount, readyCount } = getLocalMediaDecodeStatus(localMediaPlaylist);
+  if (mediaCount === 0 || readyCount >= mediaCount) {
     refreshLocalMediaDecodeStatusUi();
     return;
   }
   refreshLocalMediaDecodeStatusUi();
   localMediaDecodePollTimer = setInterval(() => {
     refreshLocalMediaDecodeStatusUi();
-    const status = getLocalMediaAudioDecodeStatus(localMediaPlaylist);
-    if (status.audioCount === 0 || status.readyCount >= status.audioCount) {
+    const status = getLocalMediaDecodeStatus(localMediaPlaylist);
+    if (status.mediaCount === 0 || status.readyCount >= status.mediaCount) {
       stopLocalMediaDecodeStatusPolling();
       updateLocalMediaUi();
     }
@@ -830,7 +836,11 @@ function addLocalMediaFiles(files: FileList | File[]) {
   const { playlist, added, skipped } = addFilesToPlaylist(localMediaPlaylist, [...files]);
   localMediaPlaylist = playlist;
   if (added > 0) {
-    prefetchAllLocalMediaAudio(localMediaPlaylist);
+    if (isLocalMediaWaitForDecodeEnabled(settings)) {
+      prefetchAllLocalMedia(localMediaPlaylist);
+    } else {
+      prefetchAllLocalMediaAudio(localMediaPlaylist);
+    }
   }
   renderLocalMediaPlaylist();
   updateLocalMediaUi();
@@ -963,6 +973,28 @@ function loadLocalMediaTrackMedia(item: LocalMediaPlaylistItem, video: HTMLVideo
   video.preload = "auto";
   video.src = objectUrl;
   bindLocalMediaElement(video);
+  if (isLocalMediaWaitForDecodeEnabled(settings)) {
+    prefetchLocalMediaVideo(item);
+  }
+}
+
+function applyPrefetchedVideoToPlayer(prepared: LocalVideoPrepareResult): void {
+  if (!localMediaLoaded) return;
+  const video = $<HTMLVideoElement>("localMediaVideo");
+  video.pause();
+  if (localMediaLoaded.revokeMedia) {
+    localMediaLoaded.revokeMedia();
+  } else if (localMediaLoaded.objectUrl) {
+    try {
+      URL.revokeObjectURL(localMediaLoaded.objectUrl);
+    } catch {
+      /* ignore */
+    }
+  }
+  video.src = prepared.objectUrl;
+  localMediaLoaded.objectUrl = prepared.objectUrl;
+  localMediaLoaded.revokeMedia = prepared.revoke;
+  bindLocalMediaElement(video);
 }
 
 async function loadLocalMediaTrack(index: number) {
@@ -975,7 +1007,11 @@ async function loadLocalMediaTrack(index: number) {
   const audio = $<HTMLAudioElement>("localMediaAudio");
   loadLocalMediaTrackMedia(item, video, audio);
 
-  prefetchAllLocalMediaAudio(localMediaPlaylist);
+  if (isLocalMediaWaitForDecodeEnabled(settings)) {
+    prefetchAllLocalMedia(localMediaPlaylist);
+  } else {
+    prefetchAllLocalMediaAudio(localMediaPlaylist);
+  }
   renderLocalMediaPlaylist();
   updateLocalMediaUi();
 }
@@ -1018,6 +1054,16 @@ async function playCurrentLocalMediaTrack() {
     localMediaLoaded.audioViaEngine = false;
     await $<HTMLAudioElement>("localMediaAudio").play();
     return;
+  }
+  const item = localMediaLoaded.item;
+  if (isLocalMediaWaitForDecodeEnabled(settings)) {
+    prefetchLocalMediaVideo(item);
+    if (!isLocalMediaItemPrefetched(item)) {
+      $("localMediaStatus").textContent = `正在预加载视频：${item.file.name}…`;
+    }
+    const prepared = await waitForPrefetchedVideo(item);
+    const taken = takePrefetchedVideo(item.id) ?? prepared;
+    applyPrefetchedVideoToPlayer(taken);
   }
   await $<HTMLVideoElement>("localMediaVideo").play();
 }
@@ -4027,7 +4073,7 @@ $("localMediaWaitForDecode").onchange = async () => {
   settings.localMediaWaitForDecode = $<HTMLInputElement>("localMediaWaitForDecode").checked;
   await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
   if (settings.localMediaWaitForDecode && localMediaPlaylist.length > 0) {
-    prefetchAllLocalMediaAudio(localMediaPlaylist);
+    prefetchAllLocalMedia(localMediaPlaylist);
     syncLocalMediaDecodeStatusPolling();
   } else {
     stopLocalMediaDecodeStatusPolling();

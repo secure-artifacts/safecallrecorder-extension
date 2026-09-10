@@ -1,9 +1,20 @@
 import { decodeLocalAudioBlob } from "./local-media-audio-engine";
 import type { LocalMediaPlaylistItem } from "./local-media-player";
 import { preparePlayableLocalMediaBlob } from "./local-media-playable";
+import { prepareLocalVideoElement, type LocalVideoPrepareResult } from "./local-media-video-loader";
 
 const audioBufferPrefetch = new Map<string, Promise<AudioBuffer>>();
 const audioBufferReady = new Map<string, AudioBuffer>();
+const videoPrefetch = new Map<string, Promise<LocalVideoPrepareResult>>();
+const videoReady = new Map<string, LocalVideoPrepareResult>();
+
+function revokeVideoPrepareResult(result: LocalVideoPrepareResult): void {
+  try {
+    result.revoke();
+  } catch {
+    /* ignore */
+  }
+}
 
 export function prefetchLocalMediaAudio(item: LocalMediaPlaylistItem): void {
   if (item.kind !== "audio") return;
@@ -52,15 +63,59 @@ export function takePrefetchedAudioBuffer(id: string): AudioBuffer | undefined {
   return undefined;
 }
 
+export function prefetchLocalMediaVideo(item: LocalMediaPlaylistItem): void {
+  if (item.kind !== "video") return;
+  if (videoReady.has(item.id) || videoPrefetch.has(item.id)) return;
+  videoPrefetch.set(
+    item.id,
+    (async () => {
+      const probe = document.createElement("video");
+      probe.muted = true;
+      probe.playsInline = true;
+      const blob = await preparePlayableLocalMediaBlob(item.file);
+      const prepared = await prepareLocalVideoElement(probe, blob, item.file.name);
+      videoReady.set(item.id, prepared);
+      videoPrefetch.delete(item.id);
+      return prepared;
+    })().catch((e) => {
+      videoPrefetch.delete(item.id);
+      throw e;
+    })
+  );
+}
+
+export function getReadyPrefetchedVideo(id: string): LocalVideoPrepareResult | undefined {
+  return videoReady.get(id);
+}
+
+export function takePrefetchedVideo(id: string): LocalVideoPrepareResult | undefined {
+  const ready = videoReady.get(id);
+  if (ready) {
+    videoReady.delete(id);
+    videoPrefetch.delete(id);
+    return ready;
+  }
+  return undefined;
+}
+
 export function clearLocalMediaPrefetch(ids?: Iterable<string>): void {
   if (!ids) {
+    for (const result of videoReady.values()) revokeVideoPrepareResult(result);
     audioBufferPrefetch.clear();
     audioBufferReady.clear();
+    videoPrefetch.clear();
+    videoReady.clear();
     return;
   }
   for (const id of ids) {
     audioBufferPrefetch.delete(id);
     audioBufferReady.delete(id);
+    videoPrefetch.delete(id);
+    const video = videoReady.get(id);
+    if (video) {
+      revokeVideoPrepareResult(video);
+      videoReady.delete(id);
+    }
   }
 }
 
@@ -68,26 +123,50 @@ export function prefetchLocalMediaPlaylist(items: LocalMediaPlaylistItem[], from
   const end = Math.min(items.length, fromIndex + count);
   for (let i = fromIndex; i < end; i++) {
     const item = items[i];
-    if (item?.kind === "audio") prefetchLocalMediaAudio(item);
+    if (!item) continue;
+    if (item.kind === "audio") prefetchLocalMediaAudio(item);
+    else if (item.kind === "video") prefetchLocalMediaVideo(item);
   }
 }
 
-export function prefetchAllLocalMediaAudio(items: LocalMediaPlaylistItem[]): void {
+export function prefetchAllLocalMedia(items: LocalMediaPlaylistItem[]): void {
   prefetchLocalMediaPlaylist(items, 0, items.length);
 }
 
+/** @deprecated Use prefetchAllLocalMedia */
+export function prefetchAllLocalMediaAudio(items: LocalMediaPlaylistItem[]): void {
+  for (const item of items) {
+    if (item.kind === "audio") prefetchLocalMediaAudio(item);
+  }
+}
+
+export function isLocalMediaItemPrefetched(item: LocalMediaPlaylistItem): boolean {
+  if (item.kind === "audio") return audioBufferReady.has(item.id);
+  if (item.kind === "video") return videoReady.has(item.id);
+  return true;
+}
+
+export function getLocalMediaDecodeStatus(items: LocalMediaPlaylistItem[]): {
+  mediaCount: number;
+  readyCount: number;
+} {
+  let mediaCount = 0;
+  let readyCount = 0;
+  for (const item of items) {
+    if (item.kind !== "audio" && item.kind !== "video") continue;
+    mediaCount += 1;
+    if (isLocalMediaItemPrefetched(item)) readyCount += 1;
+  }
+  return { mediaCount, readyCount };
+}
+
+/** @deprecated Use getLocalMediaDecodeStatus */
 export function getLocalMediaAudioDecodeStatus(items: LocalMediaPlaylistItem[]): {
   audioCount: number;
   readyCount: number;
 } {
-  let audioCount = 0;
-  let readyCount = 0;
-  for (const item of items) {
-    if (item.kind !== "audio") continue;
-    audioCount += 1;
-    if (audioBufferReady.has(item.id)) readyCount += 1;
-  }
-  return { audioCount, readyCount };
+  const status = getLocalMediaDecodeStatus(items.filter((item) => item.kind === "audio"));
+  return { audioCount: status.mediaCount, readyCount: status.readyCount };
 }
 
 /** Block until background decode finishes (for wait-for-decode playback mode). */
@@ -102,6 +181,21 @@ export async function waitForPrefetchedAudioBuffer(item: LocalMediaPlaylistItem)
     return await pending;
   } catch (e) {
     throw new Error(e instanceof Error ? e.message : "无法解码该音频");
+  }
+}
+
+/** Block until background video preload finishes (for wait-for-decode playback mode). */
+export async function waitForPrefetchedVideo(item: LocalMediaPlaylistItem): Promise<LocalVideoPrepareResult> {
+  if (item.kind !== "video") throw new Error("不是视频文件");
+  prefetchLocalMediaVideo(item);
+  const ready = getReadyPrefetchedVideo(item.id);
+  if (ready) return ready;
+  const pending = videoPrefetch.get(item.id);
+  if (!pending) throw new Error("无法预加载该视频");
+  try {
+    return await pending;
+  } catch (e) {
+    throw new Error(e instanceof Error ? e.message : "无法预加载该视频");
   }
 }
 

@@ -95,7 +95,8 @@ describe("local media player", () => {
     expect(dash).toContain("waitForPrefetchedAudioBuffer");
     expect(dash).toContain("isLocalMediaWaitForDecodeEnabled");
     expect(html).toContain('id="localMediaWaitForDecode"');
-    expect(dash).toContain("prefetchAllLocalMediaAudio");
+    expect(dash).toContain("prefetchAllLocalMedia");
+    expect(dash).toContain("waitForPrefetchedVideo");
     expect(dash).toContain("prefetchLocalMediaPlaylist");
     expect(dash).toContain("loadLocalMediaTrackMedia");
     expect(html).not.toContain('id="localMediaPlaybackMode"');

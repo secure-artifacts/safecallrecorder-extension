@@ -1,14 +1,19 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { describe, expect, it, vi } from "vitest";
 import { createLocalMediaPlaylistItem } from "../src/local-media-player";
 import {
   awaitPrefetchedAudioBuffer,
   clearLocalMediaPrefetch,
-  getLocalMediaAudioDecodeStatus,
+  getLocalMediaDecodeStatus,
   getReadyPrefetchedAudioBuffer,
   prefetchLocalMediaAudio,
+  prefetchLocalMediaVideo,
   takePrefetchedAudioBuffer,
   tryReadyAudioBuffer,
-  waitForPrefetchedAudioBuffer
+  waitForPrefetchedAudioBuffer,
+  waitForPrefetchedVideo
 } from "../src/local-media-prefetch";
 
 vi.mock("../src/local-media-playable", () => ({
@@ -17,6 +22,13 @@ vi.mock("../src/local-media-playable", () => ({
 
 vi.mock("../src/local-media-audio-engine", () => ({
   decodeLocalAudioBlob: vi.fn(async () => ({ duration: 1 } as AudioBuffer))
+}));
+
+vi.mock("../src/local-media-video-loader", () => ({
+  prepareLocalVideoElement: vi.fn(async () => ({
+    objectUrl: "blob:mock-video",
+    revoke: vi.fn()
+  }))
 }));
 
 describe("local media prefetch", () => {
@@ -38,9 +50,9 @@ describe("local media prefetch", () => {
     expect(a).toBeTruthy();
     expect(b).toBeTruthy();
     prefetchLocalMediaAudio(a!);
-    expect(getLocalMediaAudioDecodeStatus([a!, b!])).toEqual({ audioCount: 1, readyCount: 0 });
+    expect(getLocalMediaDecodeStatus([a!, b!])).toEqual({ mediaCount: 2, readyCount: 0 });
     await awaitPrefetchedAudioBuffer(a!.id);
-    expect(getLocalMediaAudioDecodeStatus([a!, b!])).toEqual({ audioCount: 1, readyCount: 1 });
+    expect(getLocalMediaDecodeStatus([a!, b!])).toEqual({ mediaCount: 2, readyCount: 1 });
     clearLocalMediaPrefetch();
   });
 
@@ -50,6 +62,15 @@ describe("local media prefetch", () => {
     const pending = waitForPrefetchedAudioBuffer(item!);
     const ready = await pending;
     expect(ready.duration).toBe(1);
+    clearLocalMediaPrefetch();
+  });
+
+  it("prefetches video into memory before playback", async () => {
+    const item = createLocalMediaPlaylistItem(new File([], "clip.mp4", { type: "video/mp4" }));
+    expect(item).toBeTruthy();
+    prefetchLocalMediaVideo(item!);
+    const prepared = await waitForPrefetchedVideo(item!);
+    expect(prepared.objectUrl).toBe("blob:mock-video");
     clearLocalMediaPrefetch();
   });
 
