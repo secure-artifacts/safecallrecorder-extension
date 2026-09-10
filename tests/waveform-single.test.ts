@@ -59,6 +59,17 @@ describe("single main waveform", () => {
     expect(host.querySelectorAll(".meter-card")).toHaveLength(1);
   });
 
+  it("shows local media playback levels in localMedia mode", () => {
+    setWaveformMode("localMedia");
+    applyLevelUpdate(
+      host,
+      level({ sessionId: "localMedia", trackId: "test", sourceLabel: "intro.mp3" })
+    );
+    expect(host.querySelector(".meter-title")!.textContent).toBe("intro.mp3");
+    applyLevelUpdate(host, level({ sessionId: "preview", trackId: "test", sourceLabel: "Stale Preview" }));
+    expect(host.querySelector(".meter-title")!.textContent).toBe("intro.mp3");
+  });
+
   it("ignores preview packets while recording", () => {
     setWaveformMode("recording", "session-1");
     applyLevelUpdate(

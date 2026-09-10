@@ -1,3 +1,6 @@
+import { AudioLevelConfig } from "./audio-level-config";
+import { AudioVisualizationConfig } from "./audio-visualization-config";
+
 /** Decode local audio into memory and play via Web Audio (no HTMLMediaElement buffering). */
 
 export type LocalMediaAudioEngineCallbacks = {
@@ -32,6 +35,7 @@ export async function decodeLocalAudioBlob(blob: Blob): Promise<AudioBuffer> {
 export class LocalMediaAudioEngine {
   private buffer: AudioBuffer | null = null;
   private source: AudioBufferSourceNode | null = null;
+  private analyser: AnalyserNode | null = null;
   private startedAt = 0;
   private offsetSec = 0;
   private intentionalStop = false;
@@ -47,12 +51,30 @@ export class LocalMediaAudioEngine {
     return this.playing;
   }
 
+  get isPaused(): boolean {
+    if (!this.buffer || this.playing) return false;
+    return this.offsetSec > 0 && this.offsetSec < this.buffer.duration - 0.05;
+  }
+
   get hasBuffer(): boolean {
     return this.buffer !== null;
   }
 
   get duration(): number {
     return this.buffer?.duration ?? 0;
+  }
+
+  get playbackAnalyser(): AnalyserNode | null {
+    return this.analyser;
+  }
+
+  getCurrentTime(): number {
+    if (!this.buffer) return 0;
+    const ctx = sharedAudioContext;
+    if (this.playing && ctx) {
+      return Math.min(this.offsetSec + (ctx.currentTime - this.startedAt), this.buffer.duration);
+    }
+    return this.offsetSec;
   }
 
   async loadBuffer(buffer: AudioBuffer): Promise<void> {
@@ -72,10 +94,14 @@ export class LocalMediaAudioEngine {
     if (!this.buffer) throw new Error("未加载音频");
     const ctx = await this.ensureContextRunning();
     this.stopSource();
-    this.intentionalStop = false;
     const source = ctx.createBufferSource();
     source.buffer = this.buffer;
-    source.connect(ctx.destination);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = AudioLevelConfig.fftSize;
+    analyser.smoothingTimeConstant = AudioVisualizationConfig.analyserSmoothingTimeConstant;
+    source.connect(analyser);
+    analyser.connect(ctx.destination);
+    this.analyser = analyser;
     source.onended = () => {
       if (this.intentionalStop) return;
       this.playing = false;
@@ -86,6 +112,7 @@ export class LocalMediaAudioEngine {
     };
     source.start(0, this.offsetSec);
     this.source = source;
+    this.intentionalStop = false;
     this.startedAt = ctx.currentTime;
     this.playing = true;
     this.startWatchdog();
@@ -108,6 +135,16 @@ export class LocalMediaAudioEngine {
     this.stopWatchdog();
   }
 
+  seek(seconds: number): void {
+    if (!this.buffer) return;
+    this.offsetSec = Math.max(0, Math.min(seconds, this.buffer.duration));
+  }
+
+  async seekAndResume(seconds: number): Promise<void> {
+    this.seek(seconds);
+    if (this.playing || this.isPaused) await this.play();
+  }
+
   /** Resume after tab visibility or user pause at mid-track offset. */
   async resumeIfShouldPlay(wantsPlay: boolean, userPaused: boolean): Promise<void> {
     if (!wantsPlay || userPaused || !this.buffer || this.playing) return;
@@ -118,15 +155,6 @@ export class LocalMediaAudioEngine {
   dispose(): void {
     this.stop();
     this.buffer = null;
-  }
-
-  private getCurrentTime(): number {
-    if (!this.buffer) return 0;
-    const ctx = sharedAudioContext;
-    if (this.playing && ctx) {
-      return Math.min(this.offsetSec + (ctx.currentTime - this.startedAt), this.buffer.duration);
-    }
-    return this.offsetSec;
   }
 
   private async ensureContextRunning(): Promise<AudioContext> {
@@ -157,16 +185,19 @@ export class LocalMediaAudioEngine {
   private stopSource(): void {
     if (!this.source) return;
     this.intentionalStop = true;
-    try {
-      this.source.stop();
-    } catch {
-      /* ignore */
-    }
-    try {
-      this.source.disconnect();
-    } catch {
-      /* ignore */
-    }
+    const oldSource = this.source;
     this.source = null;
+    this.analyser = null;
+    oldSource.onended = null;
+    try {
+      oldSource.stop();
+    } catch {
+      /* ignore */
+    }
+    try {
+      oldSource.disconnect();
+    } catch {
+      /* ignore */
+    }
   }
 }

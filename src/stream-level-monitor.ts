@@ -230,3 +230,117 @@ export class StreamLevelMonitor {
     this.detector.reset();
   }
 }
+
+/** Analyse an existing AnalyserNode (e.g. local media playback graph). */
+export class AnalyserLevelMonitor {
+  private timer?: ReturnType<typeof setInterval>;
+  private detector = new SoundDetectionEngine("standard");
+  private listeners = new Set<Listener>();
+  private timeDomain?: Uint8Array<ArrayBuffer>;
+  private freqDomain?: Uint8Array<ArrayBuffer>;
+  private lastUiEmit = 0;
+  private latestDetected?: ReturnType<SoundDetectionEngine["tick"]>;
+  private latestSample?: {
+    rms: number;
+    peak: number;
+    waveform: number[];
+    isClipping: boolean;
+    isNearClipping: boolean;
+  };
+
+  constructor(
+    private sessionId: string,
+    private trackId: TrackKind | "test",
+    private sourceLabel: string,
+    private analyser: AnalyserNode,
+    private hz = AudioVisualizationConfig.audioAnalysisRateHz
+  ) {}
+
+  onUpdate(fn: Listener) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  start() {
+    this.detector.reset();
+    this.lastUiEmit = 0;
+    this.analyser.fftSize = AudioLevelConfig.fftSize;
+    this.analyser.smoothingTimeConstant = AudioVisualizationConfig.analyserSmoothingTimeConstant;
+    this.timeDomain = new Uint8Array(new ArrayBuffer(this.analyser.fftSize));
+    this.freqDomain = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
+    const interval = Math.max(16, Math.floor(1000 / this.hz));
+    this.timer = setInterval(() => this.tick(), interval);
+  }
+
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    this.listeners.clear();
+    this.detector.reset();
+  }
+
+  private tick() {
+    if (!this.timeDomain || !this.freqDomain) return;
+    this.analyser.getByteTimeDomainData(this.timeDomain);
+    this.analyser.getByteFrequencyData(this.freqDomain);
+    const sample = sampleFromTimeDomain(
+      this.timeDomain,
+      AudioVisualizationConfig.waveformPoints,
+      this.freqDomain
+    );
+    this.latestSample = {
+      rms: sample.rms,
+      peak: sample.peak,
+      waveform: sample.waveform,
+      isClipping: sample.isClipping,
+      isNearClipping: sample.isNearClipping
+    };
+    this.latestDetected = this.detector.tick({
+      rms: sample.rms,
+      peak: sample.peak,
+      paused: false,
+      disconnected: false,
+      unavailable: false
+    });
+    this.maybeEmitToUi(false);
+  }
+
+  private maybeEmitToUi(force: boolean) {
+    const now = Date.now();
+    if (!force && now - this.lastUiEmit < uiIntervalMs()) return;
+    this.lastUiEmit = now;
+    if (!this.latestSample || !this.latestDetected) return;
+
+    const detected = this.latestDetected;
+    const sample = this.latestSample;
+    const update: AudioLevelUpdate = {
+      type: "AUDIO_LEVEL_UPDATE",
+      sessionId: this.sessionId,
+      trackId: this.trackId,
+      sourceLabel: this.sourceLabel,
+      rms: sample.rms,
+      smoothedRms: detected.smoothedRms,
+      peak: sample.peak,
+      hasSound: detected.hasSound,
+      isClipping: detected.isClipping,
+      isNearClipping: detected.isNearClipping,
+      soundState: detected.soundState,
+      soundLabel: detected.soundLabel,
+      badge: detected.badge,
+      liveText: detected.liveText,
+      detail: detected.detail,
+      waveform: sample.waveform,
+      timestamp: now,
+      volumePercent: Math.min(100, Math.round(detected.smoothedRms * AudioVisualizationConfig.volumePercentScale)),
+      peakPercent: Math.min(100, Math.round(sample.peak * 100)),
+      analyserOk: true
+    };
+    for (const fn of this.listeners) {
+      try {
+        fn(update);
+      } catch (e) {
+        console.error("[AnalyserLevelMonitor] listener error", e);
+      }
+    }
+  }
+}

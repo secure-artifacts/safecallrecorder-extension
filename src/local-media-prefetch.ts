@@ -3,14 +3,20 @@ import type { LocalMediaPlaylistItem } from "./local-media-player";
 import { preparePlayableLocalMediaBlob } from "./local-media-playable";
 
 const audioBufferPrefetch = new Map<string, Promise<AudioBuffer>>();
+const audioBufferReady = new Map<string, AudioBuffer>();
 
 export function prefetchLocalMediaAudio(item: LocalMediaPlaylistItem): void {
   if (item.kind !== "audio") return;
-  if (audioBufferPrefetch.has(item.id)) return;
+  if (audioBufferReady.has(item.id) || audioBufferPrefetch.has(item.id)) return;
   audioBufferPrefetch.set(
     item.id,
     preparePlayableLocalMediaBlob(item.file)
       .then((blob) => decodeLocalAudioBlob(blob))
+      .then((buffer) => {
+        audioBufferReady.set(item.id, buffer);
+        audioBufferPrefetch.delete(item.id);
+        return buffer;
+      })
       .catch((e) => {
         audioBufferPrefetch.delete(item.id);
         throw e;
@@ -18,10 +24,17 @@ export function prefetchLocalMediaAudio(item: LocalMediaPlaylistItem): void {
   );
 }
 
-export async function takePrefetchedAudioBuffer(id: string): Promise<AudioBuffer | undefined> {
+/** Return decoded audio only when already ready — never blocks playback. */
+export function getReadyPrefetchedAudioBuffer(id: string): AudioBuffer | undefined {
+  return audioBufferReady.get(id);
+}
+
+/** Wait for background decode; playback should not call this. */
+export async function awaitPrefetchedAudioBuffer(id: string): Promise<AudioBuffer | undefined> {
+  const ready = getReadyPrefetchedAudioBuffer(id);
+  if (ready) return ready;
   const pending = audioBufferPrefetch.get(id);
   if (!pending) return undefined;
-  audioBufferPrefetch.delete(id);
   try {
     return await pending;
   } catch {
@@ -29,12 +42,26 @@ export async function takePrefetchedAudioBuffer(id: string): Promise<AudioBuffer
   }
 }
 
+export function takePrefetchedAudioBuffer(id: string): AudioBuffer | undefined {
+  const ready = audioBufferReady.get(id);
+  if (ready) {
+    audioBufferReady.delete(id);
+    audioBufferPrefetch.delete(id);
+    return ready;
+  }
+  return undefined;
+}
+
 export function clearLocalMediaPrefetch(ids?: Iterable<string>): void {
   if (!ids) {
     audioBufferPrefetch.clear();
+    audioBufferReady.clear();
     return;
   }
-  for (const id of ids) audioBufferPrefetch.delete(id);
+  for (const id of ids) {
+    audioBufferPrefetch.delete(id);
+    audioBufferReady.delete(id);
+  }
 }
 
 export function prefetchLocalMediaPlaylist(items: LocalMediaPlaylistItem[], fromIndex = 0, count = 2): void {
@@ -42,5 +69,25 @@ export function prefetchLocalMediaPlaylist(items: LocalMediaPlaylistItem[], from
   for (let i = fromIndex; i < end; i++) {
     const item = items[i];
     if (item?.kind === "audio") prefetchLocalMediaAudio(item);
+  }
+}
+
+export function prefetchAllLocalMediaAudio(items: LocalMediaPlaylistItem[]): void {
+  prefetchLocalMediaPlaylist(items, 0, items.length);
+}
+
+/** Wait briefly for background decode; falls back to instant element playback. */
+export async function tryReadyAudioBuffer(id: string, waitMs = 250): Promise<AudioBuffer | undefined> {
+  const ready = getReadyPrefetchedAudioBuffer(id);
+  if (ready) return ready;
+  const pending = audioBufferPrefetch.get(id);
+  if (!pending || waitMs <= 0) return undefined;
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), waitMs))
+    ]);
+  } catch {
+    return undefined;
   }
 }

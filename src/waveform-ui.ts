@@ -4,7 +4,7 @@ import { AudioDisplaySmoother } from "./audio-display-smoother";
 import { volumeBadge } from "./audio-level-analyser";
 import type { AudioLevelUpdate } from "./stream-level-monitor";
 
-export type WaveformMode = "idle" | "preview" | "recording" | "disconnected" | "error";
+export type WaveformMode = "idle" | "preview" | "localMedia" | "recording" | "disconnected" | "error";
 
 type UiState = {
   title: string;
@@ -174,7 +174,11 @@ function resolveUi(update: AudioLevelUpdate | null, stale: boolean): UiState {
     badge: update.badge || volumeBadge(update) || "声音正常",
     detail:
       update.detail ||
-      (mode === "recording" ? "设备声音正常，正在录音。" : "设备中有声音，可以开始录音。"),
+      (mode === "localMedia"
+        ? "正在播放本地媒体。"
+        : mode === "recording"
+          ? "设备声音正常，正在录音。"
+          : "设备中有声音，可以开始录音。"),
     tone: "ok",
     live: update.liveText || "检测到声音",
     liveOn: true
@@ -286,7 +290,8 @@ export function applyLevelUpdate(host: HTMLElement, update: AudioLevelUpdate) {
   if (m.destroyed) return;
 
   // Ignore stale preview packets once recording has taken over (and vice versa).
-  if (mode === "recording" && update.sessionId === "preview") return;
+  if (mode === "recording" && (update.sessionId === "preview" || update.sessionId === "localMedia")) return;
+  if (mode === "localMedia" && update.sessionId !== "localMedia") return;
   if (mode === "preview" && update.sessionId !== "preview" && update.sessionId !== "test") return;
 
   const now = Date.now();

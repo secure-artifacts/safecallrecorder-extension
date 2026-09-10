@@ -44,8 +44,8 @@ describe("ui simplification contract", () => {
     expect(live).toBeGreaterThan(-1);
     expect(start).toBeGreaterThan(live);
     expect(bitrate).toBeGreaterThan(start);
-    expect(html).not.toContain(">暂停</");
-    expect(html).not.toContain("id=\"pause\"");
+    expect(html).toContain('id="localMediaPauseBtn"');
+    expect(html).not.toContain('id="pause"');
     expect(html).not.toContain("测试3秒");
     expect(html).not.toContain("网页声音＋");
     expect(html).not.toContain("同时生成混合录音");

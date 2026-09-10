@@ -165,6 +165,7 @@
           <strong>本地媒体播放</strong>
           <span class="local-media-sub">播放列表全部结束后自动开始录音</span>
         </div>
+        <p class="hint local-media-mode-hint">添加文件后会在后台预解码；点播放立刻开始，解码完成后自动切换为内存播放，拖动进度条不卡顿。</p>
         <div class="local-media-controls">
           <label class="btn outline small local-media-pick">
             添加文件
@@ -177,8 +178,16 @@
         <p id="localMediaFileName" class="local-media-file-name">播放列表为空</p>
         <ol id="localMediaPlaylist" class="local-media-playlist hidden" aria-label="本地媒体播放列表"></ol>
         <div id="localMediaPlayerWrap" class="local-media-player-wrap hidden">
-          <video id="localMediaVideo" controls playsinline class="local-media-video hidden"></video>
-          <audio id="localMediaAudio" controls class="local-media-audio hidden"></audio>
+          <video id="localMediaVideo" playsinline disablepictureinpicture class="local-media-video hidden"></video>
+          <audio id="localMediaAudio" class="local-media-audio hidden" aria-hidden="true"></audio>
+        </div>
+        <div id="localMediaTransportWrap" class="local-media-transport hidden" aria-live="polite">
+          <div class="local-media-transport-buttons">
+            <button type="button" id="localMediaPauseBtn" class="btn outline small" disabled>暂停</button>
+            <button type="button" id="localMediaResumeBtn" class="btn secondary small hidden" disabled>继续</button>
+          </div>
+          <input type="range" id="localMediaSeek" class="local-media-seek" min="0" max="1000" value="0" step="1" disabled aria-label="播放进度" />
+          <span id="localMediaAudioProgressLabel" class="local-media-audio-progress-label">00:00 / 00:00</span>
         </div>
         <p id="localMediaStatus" class="hint local-media-status">添加 mp4、mp3 等文件到播放列表；双击条目可从此处开始播放，全部播完后将自动开始录音（需在设置中开启）。</p>
       </section>

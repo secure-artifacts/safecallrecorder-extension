@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createLocalMediaPlaylistItem } from "../src/local-media-player";
 import {
+  awaitPrefetchedAudioBuffer,
   clearLocalMediaPrefetch,
+  getReadyPrefetchedAudioBuffer,
   prefetchLocalMediaAudio,
-  takePrefetchedAudioBuffer
+  takePrefetchedAudioBuffer,
+  tryReadyAudioBuffer
 } from "../src/local-media-prefetch";
 
 vi.mock("../src/local-media-playable", () => ({
@@ -15,12 +18,25 @@ vi.mock("../src/local-media-audio-engine", () => ({
 }));
 
 describe("local media prefetch", () => {
-  it("prefetches audio buffers by playlist item id", async () => {
+  it("exposes ready buffers without blocking playback", async () => {
     const item = createLocalMediaPlaylistItem(new File([], "a.mp3", { type: "audio/mpeg" }));
     expect(item).toBeTruthy();
     prefetchLocalMediaAudio(item!);
-    const buffer = await takePrefetchedAudioBuffer(item!.id);
+    expect(getReadyPrefetchedAudioBuffer(item!.id)).toBeUndefined();
+    const decoded = await awaitPrefetchedAudioBuffer(item!.id);
+    expect(decoded?.duration).toBe(1);
+    const buffer = takePrefetchedAudioBuffer(item!.id);
     expect(buffer?.duration).toBe(1);
+    clearLocalMediaPrefetch();
+  });
+
+  it("tryReadyAudioBuffer returns immediately when decode already finished", async () => {
+    const item = createLocalMediaPlaylistItem(new File([], "b.mp3", { type: "audio/mpeg" }));
+    expect(item).toBeTruthy();
+    prefetchLocalMediaAudio(item!);
+    await awaitPrefetchedAudioBuffer(item!.id);
+    const ready = await tryReadyAudioBuffer(item!.id, 0);
+    expect(ready?.duration).toBe(1);
     clearLocalMediaPrefetch();
   });
 });

@@ -27,6 +27,11 @@ if (!skipBuild) {
 await mkdir(installDir, { recursive: true });
 await syncDirectory(distDir, installDir);
 await writeFile(
+  join(installDir, ".local-install-marker"),
+  `installed-at=${new Date().toISOString()}\n`,
+  "utf8"
+);
+await writeFile(
   join(projectRoot, ".install-path.txt"),
   `${installDir}\n`,
   "utf8"

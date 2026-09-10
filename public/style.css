@@ -214,8 +214,35 @@ input[type="text"]:focus, select:focus {
   background: #000;
 }
 .local-media-audio {
-  display: block;
+  display: none !important;
+}
+.local-media-transport {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.local-media-transport-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.local-media-seek {
   width: 100%;
+  height: 8px;
+  margin: 0;
+  accent-color: #0f766e;
+  cursor: pointer;
+}
+.local-media-seek:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.local-media-audio-progress-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .local-media-status { margin: 0; }
 .local-media-status.playing { color: #0f766e; font-weight: 600; }
