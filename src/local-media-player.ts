@@ -81,6 +81,12 @@ export function isLocalMediaEndedAutoStartEnabled(
   return settings.autoStartOnLocalMediaEnded !== false;
 }
 
+export function isLocalMediaWaitForDecodeEnabled(
+  settings: Pick<AppSettings, "localMediaWaitForDecode">
+): boolean {
+  return settings.localMediaWaitForDecode === true;
+}
+
 /** Max ms to wait for background audio decode before starting playback. */
 export const LOCAL_MEDIA_SMART_DECODE_WAIT_MS = 250;
 

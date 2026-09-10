@@ -3,10 +3,12 @@ import { createLocalMediaPlaylistItem } from "../src/local-media-player";
 import {
   awaitPrefetchedAudioBuffer,
   clearLocalMediaPrefetch,
+  getLocalMediaAudioDecodeStatus,
   getReadyPrefetchedAudioBuffer,
   prefetchLocalMediaAudio,
   takePrefetchedAudioBuffer,
-  tryReadyAudioBuffer
+  tryReadyAudioBuffer,
+  waitForPrefetchedAudioBuffer
 } from "../src/local-media-prefetch";
 
 vi.mock("../src/local-media-playable", () => ({
@@ -27,6 +29,27 @@ describe("local media prefetch", () => {
     expect(decoded?.duration).toBe(1);
     const buffer = takePrefetchedAudioBuffer(item!.id);
     expect(buffer?.duration).toBe(1);
+    clearLocalMediaPrefetch();
+  });
+
+  it("reports audio decode progress for playlists", async () => {
+    const a = createLocalMediaPlaylistItem(new File([], "a.mp3", { type: "audio/mpeg" }));
+    const b = createLocalMediaPlaylistItem(new File([], "b.mp4", { type: "video/mp4" }));
+    expect(a).toBeTruthy();
+    expect(b).toBeTruthy();
+    prefetchLocalMediaAudio(a!);
+    expect(getLocalMediaAudioDecodeStatus([a!, b!])).toEqual({ audioCount: 1, readyCount: 0 });
+    await awaitPrefetchedAudioBuffer(a!.id);
+    expect(getLocalMediaAudioDecodeStatus([a!, b!])).toEqual({ audioCount: 1, readyCount: 1 });
+    clearLocalMediaPrefetch();
+  });
+
+  it("waitForPrefetchedAudioBuffer blocks until decode completes", async () => {
+    const item = createLocalMediaPlaylistItem(new File([], "c.mp3", { type: "audio/mpeg" }));
+    expect(item).toBeTruthy();
+    const pending = waitForPrefetchedAudioBuffer(item!);
+    const ready = await pending;
+    expect(ready.duration).toBe(1);
     clearLocalMediaPrefetch();
   });
 

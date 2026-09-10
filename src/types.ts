@@ -163,6 +163,8 @@ export interface AppSettings {
   autoStartOnLocalMediaTab?: boolean;
   /** Auto start when in-dashboard local media player reaches end. */
   autoStartOnLocalMediaEnded?: boolean;
+  /** Wait for audio decode before playback (helps when the system is under heavy load). */
+  localMediaWaitForDecode?: boolean;
   /** Subfolder under the chosen or default download directory, e.g. SafeCallRecorder/会议 */
   downloadFolder?: string;
   /** Display name of the user-picked download directory (handle stored in IndexedDB). */

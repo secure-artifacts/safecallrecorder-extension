@@ -54,6 +54,7 @@ import {
 } from "./recording-name-profiles";
 import {
   isLocalMediaEndedAutoStartEnabled,
+  isLocalMediaWaitForDecodeEnabled,
   addFilesToPlaylist,
   movePlaylistItem,
   reorderPlaylistItemTo,
@@ -67,12 +68,14 @@ import {
 } from "./local-media-player";
 import {
   clearLocalMediaPrefetch,
+  getLocalMediaAudioDecodeStatus,
   getReadyPrefetchedAudioBuffer,
   prefetchAllLocalMediaAudio,
   prefetchLocalMediaAudio,
   prefetchLocalMediaPlaylist,
   takePrefetchedAudioBuffer,
-  tryReadyAudioBuffer
+  tryReadyAudioBuffer,
+  waitForPrefetchedAudioBuffer
 } from "./local-media-prefetch";
 import { LocalMediaAudioEngine } from "./local-media-audio-engine";
 import {
@@ -220,6 +223,61 @@ let localMediaProgressTimer: ReturnType<typeof setInterval> | undefined;
 let localMediaWaveformMonitor: LocalMediaPlaybackMonitor | undefined;
 let localMediaSeekDragging = false;
 let localMediaWasPlayingBeforeSeek = false;
+let localMediaDecodePollTimer: ReturnType<typeof setInterval> | undefined;
+
+function resolveLocalMediaPlayStartIndex(): number {
+  if (localMediaLoaded && localMediaPlaylistIndex >= 0 && !localMediaPlaybackActive) {
+    return localMediaPlaylistIndex;
+  }
+  return 0;
+}
+
+function isLocalMediaPlayStartBlockedByDecode(): boolean {
+  if (!isLocalMediaWaitForDecodeEnabled(settings)) return false;
+  const item = localMediaPlaylist[resolveLocalMediaPlayStartIndex()];
+  if (!item || item.kind !== "audio") return false;
+  return !getReadyPrefetchedAudioBuffer(item.id);
+}
+
+function stopLocalMediaDecodeStatusPolling() {
+  if (!localMediaDecodePollTimer) return;
+  clearInterval(localMediaDecodePollTimer);
+  localMediaDecodePollTimer = undefined;
+}
+
+function refreshLocalMediaDecodeStatusUi() {
+  if (!isLocalMediaWaitForDecodeEnabled(settings) || localMediaPlaybackActive) return;
+  const { audioCount, readyCount } = getLocalMediaAudioDecodeStatus(localMediaPlaylist);
+  if (audioCount === 0) return;
+  if (readyCount < audioCount) {
+    $("localMediaStatus").textContent = `正在后台解码音频（${readyCount}/${audioCount}），完成后可播放。`;
+  } else {
+    $("localMediaStatus").textContent = playlistReadyStatus(
+      localMediaPlaylist.length,
+      isLocalMediaEndedAutoStartEnabled(settings)
+    );
+  }
+  updateLocalMediaUi();
+}
+
+function syncLocalMediaDecodeStatusPolling() {
+  stopLocalMediaDecodeStatusPolling();
+  if (!isLocalMediaWaitForDecodeEnabled(settings)) return;
+  const { audioCount, readyCount } = getLocalMediaAudioDecodeStatus(localMediaPlaylist);
+  if (audioCount === 0 || readyCount >= audioCount) {
+    refreshLocalMediaDecodeStatusUi();
+    return;
+  }
+  refreshLocalMediaDecodeStatusUi();
+  localMediaDecodePollTimer = setInterval(() => {
+    refreshLocalMediaDecodeStatusUi();
+    const status = getLocalMediaAudioDecodeStatus(localMediaPlaylist);
+    if (status.audioCount === 0 || status.readyCount >= status.audioCount) {
+      stopLocalMediaDecodeStatusPolling();
+      updateLocalMediaUi();
+    }
+  }, 400);
+}
 
 function isLocalMediaSessionBusy() {
   return localMediaSessionActive || localMediaWantsPlay || localMediaPlaybackActive;
@@ -592,7 +650,7 @@ function updateLocalMediaUi() {
   const clearBtn = $<HTMLButtonElement>("localMediaClearPlaylistBtn");
   const hasPlaylist = localMediaPlaylist.length > 0;
   const audioPlaying = isLocalMediaAudioPlayingNow();
-  playBtn.disabled = busy || !hasPlaylist || audioPlaying;
+  playBtn.disabled = busy || !hasPlaylist || audioPlaying || isLocalMediaPlayStartBlockedByDecode();
   stopBtn.disabled = busy || !hasPlaylist;
   stopBtn.classList.toggle("hidden", !hasPlaylist);
   clearBtn.disabled = busy || !hasPlaylist;
@@ -713,6 +771,7 @@ function unloadCurrentLocalMediaTrack() {
 
 function clearLocalMediaPlaylist() {
   stopLocalMediaPlayback();
+  stopLocalMediaDecodeStatusPolling();
   unloadCurrentLocalMediaTrack();
   clearLocalMediaPrefetch();
   localMediaPlaylist = [];
@@ -778,7 +837,11 @@ function addLocalMediaFiles(files: FileList | File[]) {
 
   const autoStart = isLocalMediaEndedAutoStartEnabled(settings);
   if (added > 0) {
-    $("localMediaStatus").textContent = playlistReadyStatus(localMediaPlaylist.length, autoStart);
+    if (isLocalMediaWaitForDecodeEnabled(settings)) {
+      syncLocalMediaDecodeStatusPolling();
+    } else {
+      $("localMediaStatus").textContent = playlistReadyStatus(localMediaPlaylist.length, autoStart);
+    }
   }
   if (skipped.length > 0) {
     const skipNote = skipped.length === 1 ? skipped[0] : `${skipped.length} 个文件`;
@@ -936,6 +999,15 @@ async function playCurrentLocalMediaTrack() {
   if (isLocalMediaAudioTrack()) {
     const item = localMediaLoaded.item;
     prefetchLocalMediaAudio(item);
+    if (isLocalMediaWaitForDecodeEnabled(settings)) {
+      if (!getReadyPrefetchedAudioBuffer(item.id)) {
+        $("localMediaStatus").textContent = `正在解码：${item.file.name}…`;
+      }
+      const ready = await waitForPrefetchedAudioBuffer(item);
+      takePrefetchedAudioBuffer(item.id);
+      await playLocalMediaViaWebAudio(ready);
+      return;
+    }
     let ready = getReadyPrefetchedAudioBuffer(item.id);
     if (!ready) ready = await tryReadyAudioBuffer(item.id, LOCAL_MEDIA_SMART_DECODE_WAIT_MS);
     if (ready) {
@@ -1340,6 +1412,11 @@ function syncAutoStartSettingsUi() {
   if (master) master.checked = settings.autoStartRecording === true;
   if (localTab) localTab.checked = settings.autoStartOnLocalMediaTab !== false;
   if (localEnded) localEnded.checked = settings.autoStartOnLocalMediaEnded !== false;
+}
+
+function syncLocalMediaWaitForDecodeUi() {
+  const el = $<HTMLInputElement>("localMediaWaitForDecode");
+  if (el) el.checked = isLocalMediaWaitForDecodeEnabled(settings);
 }
 
 async function persistAutoStartSettings() {
@@ -3067,6 +3144,7 @@ function syncAllSettingsUi() {
   syncRecordingNameProfilesUi();
   syncDownloadSettingsUi();
   syncAutoStartSettingsUi();
+  syncLocalMediaWaitForDecodeUi();
   const sens = $<HTMLSelectElement>("detectionSensitivity");
   if (sens) sens.value = settings.detectionSensitivity || "standard";
   const def = $<HTMLSelectElement>("defaultBitrate");
@@ -3944,6 +4022,23 @@ $("autoStartOnLocalMediaEnded").onchange = async () => {
   settings.autoStartRecording = true;
   $<HTMLInputElement>("autoStartRecording").checked = true;
   await persistAutoStartSettings();
+};
+$("localMediaWaitForDecode").onchange = async () => {
+  settings.localMediaWaitForDecode = $<HTMLInputElement>("localMediaWaitForDecode").checked;
+  await ask(MessageType.SaveSettings, { ...settings }).catch(() => undefined);
+  if (settings.localMediaWaitForDecode && localMediaPlaylist.length > 0) {
+    prefetchAllLocalMediaAudio(localMediaPlaylist);
+    syncLocalMediaDecodeStatusPolling();
+  } else {
+    stopLocalMediaDecodeStatusPolling();
+    if (localMediaPlaylist.length > 0 && !localMediaPlaybackActive) {
+      $("localMediaStatus").textContent = playlistReadyStatus(
+        localMediaPlaylist.length,
+        isLocalMediaEndedAutoStartEnabled(settings)
+      );
+    }
+  }
+  updateLocalMediaUi();
 };
 $("defaultBitrate").onchange = async () => {
   settings.defaultBitrate = resolveBitrate(Number($<HTMLSelectElement>("defaultBitrate").value));

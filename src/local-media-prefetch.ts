@@ -76,6 +76,35 @@ export function prefetchAllLocalMediaAudio(items: LocalMediaPlaylistItem[]): voi
   prefetchLocalMediaPlaylist(items, 0, items.length);
 }
 
+export function getLocalMediaAudioDecodeStatus(items: LocalMediaPlaylistItem[]): {
+  audioCount: number;
+  readyCount: number;
+} {
+  let audioCount = 0;
+  let readyCount = 0;
+  for (const item of items) {
+    if (item.kind !== "audio") continue;
+    audioCount += 1;
+    if (audioBufferReady.has(item.id)) readyCount += 1;
+  }
+  return { audioCount, readyCount };
+}
+
+/** Block until background decode finishes (for wait-for-decode playback mode). */
+export async function waitForPrefetchedAudioBuffer(item: LocalMediaPlaylistItem): Promise<AudioBuffer> {
+  if (item.kind !== "audio") throw new Error("不是音频文件");
+  prefetchLocalMediaAudio(item);
+  const ready = getReadyPrefetchedAudioBuffer(item.id);
+  if (ready) return ready;
+  const pending = audioBufferPrefetch.get(item.id);
+  if (!pending) throw new Error("无法解码该音频");
+  try {
+    return await pending;
+  } catch (e) {
+    throw new Error(e instanceof Error ? e.message : "无法解码该音频");
+  }
+}
+
 /** Wait briefly for background decode; falls back to instant element playback. */
 export async function tryReadyAudioBuffer(id: string, waitMs = 250): Promise<AudioBuffer | undefined> {
   const ready = getReadyPrefetchedAudioBuffer(id);

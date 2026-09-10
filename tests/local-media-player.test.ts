@@ -4,6 +4,7 @@ import {
   detectLocalMediaKind,
   formatPlaybackTime,
   isLocalMediaEndedAutoStartEnabled,
+  isLocalMediaWaitForDecodeEnabled,
   movePlaylistItem,
   reorderPlaylistItemTo,
   playlistPlayingStatus,
@@ -27,6 +28,12 @@ describe("local media player", () => {
   it("formats playback durations", () => {
     expect(formatPlaybackTime(65)).toBe("01:05");
     expect(formatPlaybackTime(3661)).toBe("01:01:01");
+  });
+
+  it("enables wait-for-decode mode only when explicitly set", () => {
+    expect(isLocalMediaWaitForDecodeEnabled({})).toBe(false);
+    expect(isLocalMediaWaitForDecodeEnabled({ localMediaWaitForDecode: false })).toBe(false);
+    expect(isLocalMediaWaitForDecodeEnabled({ localMediaWaitForDecode: true })).toBe(true);
   });
 
   it("enables post-play auto-start independently of master switch", () => {
@@ -85,6 +92,9 @@ describe("local media player", () => {
     expect(dash).toContain("LocalMediaAudioEngine");
     expect(dash).toContain("createObjectURL");
     expect(dash).toContain("tryReadyAudioBuffer");
+    expect(dash).toContain("waitForPrefetchedAudioBuffer");
+    expect(dash).toContain("isLocalMediaWaitForDecodeEnabled");
+    expect(html).toContain('id="localMediaWaitForDecode"');
     expect(dash).toContain("prefetchAllLocalMediaAudio");
     expect(dash).toContain("prefetchLocalMediaPlaylist");
     expect(dash).toContain("loadLocalMediaTrackMedia");
